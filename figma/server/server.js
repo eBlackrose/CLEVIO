@@ -10,9 +10,14 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import sgMail from '@sendgrid/mail';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize Prisma Client
+const prisma = new PrismaClient();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -60,23 +65,42 @@ if (EMAIL_MODE === 'sendgrid') {
   console.log('📧 Email mode: LOG (emails will be logged to console)');
 }
 
-// In-memory storage (replace with database in production)
-const users = new Map();
-const otpCodes = new Map();
-const adminUsers = new Map();
-
-// Initialize with test admin (development only)
-if (isDev) {
-  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@clevio.com';
-  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
-  adminUsers.set(adminEmail, {
-    password: adminPassword,
-    firstName: 'Admin',
-    lastName: 'User',
-    role: 'admin',
-  });
-  console.log(`🔧 Development mode: Test admin created (${adminEmail} / ${adminPassword})`);
+// Initialize test admin (development only)
+async function initializeTestAdmin() {
+  if (isDev) {
+    const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@clevio.com';
+    const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+    
+    try {
+      // Check if admin already exists
+      const existingAdmin = await prisma.user.findUnique({
+        where: { email: adminEmail }
+      });
+      
+      if (!existingAdmin) {
+        const passwordHash = await bcrypt.hash(adminPassword, 10);
+        await prisma.user.create({
+          data: {
+            email: adminEmail,
+            passwordHash,
+            firstName: 'Admin',
+            lastName: 'User',
+            role: 'admin',
+            verified: true,
+          }
+        });
+        console.log(`🔧 Development mode: Test admin created (${adminEmail} / ${adminPassword})`);
+      } else {
+        console.log(`🔧 Development mode: Test admin already exists (${adminEmail})`);
+      }
+    } catch (error) {
+      console.error('Error creating test admin:', error.message);
+    }
+  }
 }
+
+// Call on startup
+initializeTestAdmin();
 
 /**
  * User Signup Endpoint
@@ -101,23 +125,41 @@ app.post('/api/user/signup', async (req, res) => {
     }
     
     // Check if user already exists
-    if (users.has(email)) {
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+    
+    if (existingUser) {
       console.warn(`❌ Signup failed - user already exists: ${email}`);
       console.groupEnd();
       return res.status(400).json({ message: 'Email already registered' });
     }
     
-    // Store user (in production, hash password with bcrypt)
-    users.set(email, {
-      password, // TODO: Hash with bcrypt in production
-      firstName,
-      lastName,
-      companyName,
-      createdAt: new Date().toISOString(),
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    // Create user and company in a transaction
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        firstName,
+        lastName,
+        verified: false,
+        role: 'user',
+        company: {
+          create: {
+            name: companyName,
+          }
+        }
+      },
+      include: {
+        company: true
+      }
     });
     
     console.log(`✅ User created successfully: ${email}`);
-    console.log(`Total users in database: ${users.size}`);
+    console.log(`Company created: ${companyName}`);
     console.groupEnd();
     
     res.status(200).json({ 
@@ -155,7 +197,11 @@ app.post('/api/user/login', async (req, res) => {
     }
     
     // Check if user exists
-    const user = users.get(email);
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true }
+    });
+    
     console.log(`User lookup: ${user ? 'Found' : 'Not found'}`);
     
     if (!user) {
@@ -165,7 +211,7 @@ app.post('/api/user/login', async (req, res) => {
     }
     
     // Verify password
-    const passwordValid = user.password === password; // TODO: Use bcrypt.compare in production
+    const passwordValid = await bcrypt.compare(password, user.passwordHash);
     console.log(`Password validation: ${passwordValid ? 'Valid' : 'Invalid'}`);
     
     if (!passwordValid) {
@@ -176,13 +222,21 @@ app.post('/api/user/login', async (req, res) => {
     
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + OTP_EXP_MINUTES * 60 * 1000;
+    const expiresAt = new Date(Date.now() + OTP_EXP_MINUTES * 60 * 1000);
     
-    // Store OTP
-    otpCodes.set(email, {
-      code: otp,
-      expires: expiresAt,
-      attempts: 0,
+    // Delete any existing OTP codes for this email
+    await prisma.oTPCode.deleteMany({
+      where: { email }
+    });
+    
+    // Store OTP in database
+    await prisma.oTPCode.create({
+      data: {
+        email,
+        code: otp,
+        expiresAt,
+        attempts: 0,
+      }
     });
     
     if (isDev) {
@@ -190,7 +244,7 @@ app.post('/api/user/login', async (req, res) => {
     } else {
       console.log(`✅ Generated OTP for ${email} (hidden in production)`);
     }
-    console.log(`OTP expires at: ${new Date(expiresAt).toISOString()}`);
+    console.log(`OTP expires at: ${expiresAt.toISOString()}`);
     
     // Send OTP via email
     try {
@@ -277,8 +331,12 @@ app.post('/api/user/verify-2fa', async (req, res) => {
       return res.status(400).json({ message: 'Email and code required' });
     }
     
-    // Get stored OTP
-    const storedOtp = otpCodes.get(email);
+    // Get stored OTP from database
+    const storedOtp = await prisma.oTPCode.findFirst({
+      where: { email },
+      orderBy: { createdAt: 'desc' }
+    });
+    
     console.log(`Stored OTP lookup: ${storedOtp ? 'Found' : 'Not found'}`);
     
     if (!storedOtp) {
@@ -288,19 +346,19 @@ app.post('/api/user/verify-2fa', async (req, res) => {
     }
     
     // Check expiration
-    const now = Date.now();
-    const timeRemaining = storedOtp.expires - now;
-    const isExpired = now > storedOtp.expires;
+    const now = new Date();
+    const isExpired = now > storedOtp.expiresAt;
+    const timeRemaining = storedOtp.expiresAt.getTime() - now.getTime();
     
     console.log(`OTP expiry check:`, {
-      now: new Date(now).toISOString(),
-      expires: new Date(storedOtp.expires).toISOString(),
+      now: now.toISOString(),
+      expires: storedOtp.expiresAt.toISOString(),
       timeRemainingMs: timeRemaining,
       isExpired,
     });
     
     if (isExpired) {
-      otpCodes.delete(email);
+      await prisma.oTPCode.delete({ where: { id: storedOtp.id } });
       console.error(`❌ 2FA failed - code expired for: ${email}`);
       console.groupEnd();
       return res.status(400).json({ message: 'Verification code expired. Please sign in again.' });
@@ -308,7 +366,7 @@ app.post('/api/user/verify-2fa', async (req, res) => {
     
     // Check attempts (max configured)
     if (storedOtp.attempts >= OTP_MAX_ATTEMPTS) {
-      otpCodes.delete(email);
+      await prisma.oTPCode.delete({ where: { id: storedOtp.id } });
       console.error(`❌ 2FA failed - too many attempts for: ${email}`);
       console.groupEnd();
       return res.status(400).json({ message: 'Too many failed attempts. Please sign in again.' });
@@ -323,8 +381,13 @@ app.post('/api/user/verify-2fa', async (req, res) => {
     });
     
     if (!codeMatches) {
-      storedOtp.attempts += 1;
-      const attemptsRemaining = OTP_MAX_ATTEMPTS - storedOtp.attempts;
+      // Increment attempts
+      await prisma.oTPCode.update({
+        where: { id: storedOtp.id },
+        data: { attempts: storedOtp.attempts + 1 }
+      });
+      
+      const attemptsRemaining = OTP_MAX_ATTEMPTS - (storedOtp.attempts + 1);
       console.error(`❌ 2FA failed - invalid code for: ${email} (${attemptsRemaining} attempts remaining)`);
       console.groupEnd();
       return res.status(400).json({ 
@@ -333,10 +396,14 @@ app.post('/api/user/verify-2fa', async (req, res) => {
       });
     }
     
-    // Success - clear OTP
-    otpCodes.delete(email);
+    // Success - clear OTP and mark user as verified
+    await prisma.oTPCode.delete({ where: { id: storedOtp.id } });
     
-    const user = users.get(email);
+    const user = await prisma.user.update({
+      where: { email },
+      data: { verified: true },
+      include: { company: true }
+    });
     
     console.log(`✅ 2FA verification successful for: ${email}`);
     console.log(`User authenticated:`, {
@@ -352,12 +419,126 @@ app.post('/api/user/verify-2fa', async (req, res) => {
         email,
         firstName: user.firstName,
         lastName: user.lastName,
-        companyName: user.companyName,
+        companyName: user.company?.name || '',
       }
     });
     
   } catch (error) {
     console.error(`❌ [${requestId}] Unexpected error in 2FA verification:`, error.message);
+    console.error('Stack trace:', error.stack);
+    console.groupEnd();
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Resend OTP Endpoint
+ * POST /api/user/resend-otp
+ */
+app.post('/api/user/resend-otp', async (req, res) => {
+  const requestId = req.requestId;
+  
+  try {
+    console.group(`🔁 [${requestId}] Resend OTP`);
+    
+    const { email } = req.body;
+    
+    console.log(`Resend OTP request: ${email}`);
+    
+    if (!email) {
+      console.warn(`❌ Resend validation failed - missing email`);
+      console.groupEnd();
+      return res.status(400).json({ message: 'Email required' });
+    }
+    
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+    
+    if (!user) {
+      console.warn(`❌ Resend failed - user not found: ${email}`);
+      console.groupEnd();
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Check rate limiting (last code creation time)
+    const lastCode = await prisma.oTPCode.findFirst({
+      where: { email },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    if (lastCode) {
+      const timeSinceLastCode = Date.now() - lastCode.createdAt.getTime();
+      if (timeSinceLastCode < OTP_RESEND_COOLDOWN * 1000) {
+        const waitTime = Math.ceil((OTP_RESEND_COOLDOWN * 1000 - timeSinceLastCode) / 1000);
+        console.warn(`❌ Resend rate limited for: ${email} (wait ${waitTime}s)`);
+        console.groupEnd();
+        return res.status(429).json({ 
+          message: `Please wait ${waitTime} seconds before requesting a new code`,
+          waitTime
+        });
+      }
+    }
+    
+    // Delete old codes
+    await prisma.oTPCode.deleteMany({ where: { email } });
+    
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + OTP_EXP_MINUTES * 60 * 1000);
+    
+    await prisma.oTPCode.create({
+      data: {
+        email,
+        code: otp,
+        expiresAt,
+        attempts: 0,
+      }
+    });
+    
+    // Send OTP email (reuse email logic)
+    try {
+      const msg = {
+        to: email,
+        from: EMAIL_FROM,
+        subject: 'CLEVIO - Your Verification Code',
+        text: `Your CLEVIO verification code is: ${otp}\n\nThis code expires in ${OTP_EXP_MINUTES} minutes.\n\nIf you didn't request this code, please ignore this email.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #000;">CLEVIO Verification Code</h2>
+            <p>Your verification code is:</p>
+            <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
+              ${otp}
+            </div>
+            <p style="color: #666;">This code expires in ${OTP_EXP_MINUTES} minutes.</p>
+            <p style="color: #666; font-size: 12px;">If you didn't request this code, please ignore this email.</p>
+          </div>
+        `,
+      };
+      
+      if (EMAIL_MODE === 'sendgrid' && process.env.SENDGRID_API_KEY) {
+        await sgMail.send(msg);
+        console.log(`✅ OTP email sent to ${email}`);
+      } else {
+        console.log(`\n🔐 ═══════════════════════════════════════`);
+        console.log(`   EMAIL MODE: LOG - CODE: ${otp}`);
+        console.log(`═══════════════════════════════════════\n`);
+      }
+    } catch (emailError) {
+      console.error(`❌ Email sending failed:`, emailError.message);
+    }
+    
+    console.log(`✅ New OTP generated for ${email}`);
+    console.groupEnd();
+    
+    res.status(200).json({ 
+      message: 'New verification code sent',
+      cooldown: OTP_RESEND_COOLDOWN
+    });
+    
+  } catch (error) {
+    console.error(`❌ [${requestId}] Unexpected error in resend:`, error.message);
     console.error('Stack trace:', error.stack);
     console.groupEnd();
     res.status(500).json({ message: 'Internal server error' });
@@ -386,17 +567,20 @@ app.post('/api/admin/login', async (req, res) => {
     }
     
     // Check if admin exists
-    const admin = adminUsers.get(email);
+    const admin = await prisma.user.findUnique({
+      where: { email }
+    });
+    
     console.log(`ADMIN lookup: ${admin ? 'Found' : 'Not found'}`);
     
-    if (!admin) {
-      console.warn(`❌ ADMIN login failed - user not found: ${email}`);
+    if (!admin || admin.role !== 'admin') {
+      console.warn(`❌ ADMIN login failed - user not found or not admin: ${email}`);
       console.groupEnd();
       return res.status(401).json({ message: 'Invalid admin credentials' });
     }
     
     // Verify password
-    const passwordValid = admin.password === password; // TODO: Use bcrypt.compare in production
+    const passwordValid = await bcrypt.compare(password, admin.passwordHash);
     console.log(`ADMIN password validation: ${passwordValid ? 'Valid' : 'Invalid'}`);
     
     if (!passwordValid) {
@@ -490,12 +674,14 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('\n⚠️ SIGTERM received, shutting down gracefully...');
+  await prisma.$disconnect();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n⚠️ SIGINT received, shutting down gracefully...');
+  await prisma.$disconnect();
   process.exit(0);
 });
