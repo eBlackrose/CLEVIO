@@ -11,6 +11,7 @@ const prisma = new PrismaClient();
 
 describe('Dashboard API', () => {
   let authUserId: number;
+  let authToken: string;
   let authEmail = 'dashboard-test@example.com';
 
   // Helper to create and authenticate a user
@@ -36,13 +37,15 @@ describe('Dashboard API', () => {
       });
 
     authUserId = verifyRes.body.user.id;
+    authToken = verifyRes.body.token; // Extract JWT token
+    expect(authToken).toBeTruthy(); // Verify token exists
   });
 
   describe('GET /api/user/me', () => {
-    it('should return complete user profile', async () => {
+    it('should return complete user profile with valid JWT', async () => {
       const res = await request(app)
         .get('/api/user/me')
-        .query({ email: authEmail })
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(res.body.email).toBe(authEmail);
@@ -58,6 +61,15 @@ describe('Dashboard API', () => {
 
       expect(res.body.error).toBeTruthy();
     });
+    
+    it('should return 401 for invalid JWT token', async () => {
+      const res = await request(app)
+        .get('/api/user/me')
+        .set('Authorization', 'Bearer invalid-token-here')
+        .expect(401);
+
+      expect(res.body.error).toMatch(/invalid|unauthorized/i);
+    });
   });
 
   describe('Company Profile API', () => {
@@ -65,7 +77,7 @@ describe('Dashboard API', () => {
       it('should return company profile', async () => {
         const res = await request(app)
           .get('/api/company')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(res.body.company).toBeTruthy();
@@ -84,7 +96,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .put('/api/company')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send(updateData)
           .expect(200);
 
@@ -95,7 +107,7 @@ describe('Dashboard API', () => {
       it('should validate EIN format', async () => {
         const res = await request(app)
           .put('/api/company')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ ein: 'invalid-ein' })
           .expect(400);
 
@@ -120,7 +132,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .post('/api/team')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send(employee)
           .expect(200);
 
@@ -131,7 +143,7 @@ describe('Dashboard API', () => {
       it('should validate required fields', async () => {
         const res = await request(app)
           .post('/api/team')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ firstName: 'Jane' }) // Missing required fields
           .expect(400);
 
@@ -151,7 +163,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .post('/api/team')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send(employee)
           .expect(200);
 
@@ -165,7 +177,7 @@ describe('Dashboard API', () => {
       it('should list all team members', async () => {
         const res = await request(app)
           .get('/api/team')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(Array.isArray(res.body.employees)).toBe(true);
@@ -178,13 +190,13 @@ describe('Dashboard API', () => {
         // Get existing employee
         const listRes = await request(app)
           .get('/api/team')
-          .query({ email: authEmail });
+          .set('Authorization', `Bearer ${authToken}`);
         
         const employeeId = listRes.body.employees[0].id;
 
         const res = await request(app)
           .put(`/api/team/${employeeId}`)
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ salary: 110000 })
           .expect(200);
 
@@ -197,7 +209,7 @@ describe('Dashboard API', () => {
         // Create employee to delete
         const createRes = await request(app)
           .post('/api/team')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             firstName: 'ToDelete',
             lastName: 'User',
@@ -211,7 +223,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .delete(`/api/team/${employeeId}`)
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(res.body.message).toMatch(/deleted|removed/i);
@@ -224,7 +236,7 @@ describe('Dashboard API', () => {
       it('should return subscription status', async () => {
         const res = await request(app)
           .get('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(res.body.subscriptions).toBeTruthy();
@@ -236,7 +248,7 @@ describe('Dashboard API', () => {
       it('should enable payroll tier', async () => {
         const res = await request(app)
           .put('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             tier: 'payroll',
             active: true
@@ -252,13 +264,13 @@ describe('Dashboard API', () => {
         // Enable payroll
         await request(app)
           .put('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ tier: 'payroll', active: true });
 
         // Try to disable immediately
         const res = await request(app)
           .put('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ tier: 'payroll', active: false })
           .expect(400);
 
@@ -269,22 +281,22 @@ describe('Dashboard API', () => {
         // Enable all tiers
         await request(app)
           .put('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ tier: 'payroll', active: true });
 
         await request(app)
           .put('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ tier: 'tax', active: true });
 
         await request(app)
           .put('/api/subscriptions')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({ tier: 'advisory', active: true });
 
         const res = await request(app)
           .get('/api/subscriptions')
-          .query({ email: authEmail });
+          .set('Authorization', `Bearer ${authToken}`);
 
         const totalRate = res.body.subscriptions
           .filter((s: any) => s.active)
@@ -300,7 +312,7 @@ describe('Dashboard API', () => {
       it('should return payroll schedule', async () => {
         const res = await request(app)
           .get('/api/payroll/schedule')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(res.body.schedule).toBeTruthy();
@@ -317,7 +329,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .put('/api/payroll/schedule')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send(scheduleData)
           .expect(200);
 
@@ -330,7 +342,7 @@ describe('Dashboard API', () => {
       it('should block payroll if team < 5', async () => {
         const res = await request(app)
           .post('/api/payroll/run')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(400);
 
         expect(res.body.error).toMatch(/5 team members|minimum/i);
@@ -341,7 +353,7 @@ describe('Dashboard API', () => {
         for (let i = 0; i < 5; i++) {
           await request(app)
             .post('/api/team')
-            .query({ email: authEmail })
+            .set('Authorization', `Bearer ${authToken}`)
             .send({
               firstName: `Employee${i}`,
               lastName: 'Test',
@@ -354,7 +366,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .post('/api/payroll/run')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(400);
 
         expect(res.body.error).toMatch(/AMEX|payment method/i);
@@ -367,7 +379,7 @@ describe('Dashboard API', () => {
       it('should return advisory sessions', async () => {
         const res = await request(app)
           .get('/api/advisory')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(Array.isArray(res.body.sessions)).toBe(true);
@@ -378,7 +390,7 @@ describe('Dashboard API', () => {
       it('should block if team < 5', async () => {
         const res = await request(app)
           .post('/api/advisory')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             date: '2024-12-01',
             time: '10:00',
@@ -395,7 +407,7 @@ describe('Dashboard API', () => {
         
         const res = await request(app)
           .post('/api/advisory')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             date: '2024-12-01',
             time: '10:00',
@@ -413,7 +425,7 @@ describe('Dashboard API', () => {
       it('should return AMEX card status', async () => {
         const res = await request(app)
           .get('/api/payments/amex')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(res.body).toHaveProperty('connected');
@@ -431,7 +443,7 @@ describe('Dashboard API', () => {
 
         const res = await request(app)
           .post('/api/payments/amex')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .send(cardData)
           .expect(200);
 
@@ -445,7 +457,7 @@ describe('Dashboard API', () => {
       it('should return billing history', async () => {
         const res = await request(app)
           .get('/api/billing/history')
-          .query({ email: authEmail })
+          .set('Authorization', `Bearer ${authToken}`)
           .expect(200);
 
         expect(Array.isArray(res.body.history)).toBe(true);
