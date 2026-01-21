@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Loader2, AlertCircle, Bug } from 'lucide-react';
 import { apiFetch } from '../config/api';
+import { useUser } from '../contexts/user-context';
 
 // Development logging helper
 const isDev = process.env.NODE_ENV === 'development';
@@ -20,6 +21,7 @@ const debugError = (...args: any[]) => {
 
 export function SignInPage() {
   const navigate = useNavigate();
+  const { refreshUserData } = useUser();
   const [searchParams] = useSearchParams();
   const showDebug = searchParams.get('debug') === 'true';
   
@@ -275,6 +277,10 @@ export function SignInPage() {
         });
         
         console.log('🎉 User logged in successfully:', email);
+        
+        // Fetch user data from backend
+        debugLog('Fetching user data from backend...');
+        await refreshUserData();
         
         toast.success('Welcome back!', {
           description: 'Redirecting to your dashboard...',
