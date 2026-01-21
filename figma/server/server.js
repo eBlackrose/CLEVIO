@@ -611,6 +611,757 @@ app.post('/api/admin/login', async (req, res) => {
 });
 
 /**
+ * Get User Profile and Data
+ * GET /api/user/me
+ */
+app.get('/api/user/me', async (req, res) => {
+  const requestId = req.requestId;
+  
+  try {
+    const { email } = req.query;
+    
+    if (!email) {
+      return res.status(400).json({ message: 'Email required' });
+    }
+    
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: {
+            employees: true,
+            subscriptions: true,
+            payrollSchedule: true,
+            notificationPreferences: true,
+            billingHistory: {
+              orderBy: { date: 'desc' },
+              take: 10
+            }
+          }
+        }
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Get AMEX card if exists
+    const amexCard = await prisma.amexCard.findFirst({
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    // Get advisory sessions
+    const advisorySessions = await prisma.advisorySession.findMany({
+      where: {
+        date: { gte: new Date() }
+      },
+      orderBy: { date: 'asc' }
+    });
+    
+    res.status(200).json({
+      user: {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        verified: user.verified,
+        role: user.role,
+      },
+      company: user.company ? {
+        id: user.company.id,
+        name: user.company.name,
+        ein: user.company.ein,
+        businessAddress: user.company.businessAddress,
+        city: user.company.city,
+        state: user.company.state,
+        zipCode: user.company.zipCode,
+        phone: user.company.phone,
+        employees: user.company.employees,
+        subscriptions: user.company.subscriptions[0] || null,
+        payrollSchedule: user.company.payrollSchedule || null,
+        notificationPreferences: user.company.notificationPreferences || null,
+        billingHistory: user.company.billingHistory,
+      } : null,
+      amexCard,
+      advisorySessions,
+    });
+  } catch (error) {
+    console.error(`[${requestId}] Error getting user data:`, error.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Company Profile Endpoints
+ */
+
+// GET Company
+app.get('/api/company', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: { company: true }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    res.status(200).json(user.company);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// PUT Company
+app.put('/api/company', async (req, res) => {
+  const { email, name, ein, businessAddress, city, state, zipCode, phone } = req.body;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    const updated = await prisma.company.update({
+      where: { id: user.company.id },
+      data: {
+        name: name || user.company.name,
+        ein: ein !== undefined ? ein : user.company.ein,
+        businessAddress: businessAddress !== undefined ? businessAddress : user.company.businessAddress,
+        city: city !== undefined ? city : user.company.city,
+        state: state !== undefined ? state : user.company.state,
+        zipCode: zipCode !== undefined ? zipCode : user.company.zipCode,
+        phone: phone !== undefined ? phone : user.company.phone,
+      }
+    });
+    
+    res.status(200).json(updated);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Notification Preferences Endpoints
+ */
+
+// GET Notifications
+app.get('/api/notifications', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: { notificationPreferences: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    // Create default if doesn't exist
+    if (!user.company.notificationPreferences) {
+      const prefs = await prisma.notificationPreferences.create({
+        data: {
+          companyId: user.company.id,
+          payrollReminders: true,
+          advisoryReminders: true,
+          paymentConfirmations: true,
+          monthlyReports: true,
+        }
+      });
+      return res.status(200).json(prefs);
+    }
+    
+    res.status(200).json(user.company.notificationPreferences);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// PUT Notifications
+app.put('/api/notifications', async (req, res) => {
+  const { email, payrollReminders, advisoryReminders, paymentConfirmations, monthlyReports } = req.body;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: {
+          include: { notificationPreferences: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    let prefs;
+    if (user.company.notificationPreferences) {
+      prefs = await prisma.notificationPreferences.update({
+        where: { id: user.company.notificationPreferences.id },
+        data: {
+          payrollReminders: payrollReminders !== undefined ? payrollReminders : user.company.notificationPreferences.payrollReminders,
+          advisoryReminders: advisoryReminders !== undefined ? advisoryReminders : user.company.notificationPreferences.advisoryReminders,
+          paymentConfirmations: paymentConfirmations !== undefined ? paymentConfirmations : user.company.notificationPreferences.paymentConfirmations,
+          monthlyReports: monthlyReports !== undefined ? monthlyReports : user.company.notificationPreferences.monthlyReports,
+        }
+      });
+    } else {
+      prefs = await prisma.notificationPreferences.create({
+        data: {
+          companyId: user.company.id,
+          payrollReminders: payrollReminders ?? true,
+          advisoryReminders: advisoryReminders ?? true,
+          paymentConfirmations: paymentConfirmations ?? true,
+          monthlyReports: monthlyReports ?? true,
+        }
+      });
+    }
+    
+    res.status(200).json(prefs);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Team (Employees & Contractors) Endpoints
+ */
+
+// GET Team
+app.get('/api/team', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: { employees: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    res.status(200).json(user.company.employees);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// POST Team Member
+app.post('/api/team', async (req, res) => {
+  const { email, fullName, memberEmail, type, salary, bankName, routingNumber, accountLast4, ssnLast4 } = req.body;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    const employee = await prisma.employee.create({
+      data: {
+        companyId: user.company.id,
+        fullName,
+        email: memberEmail,
+        type: type || 'employee',
+        salary: salary ? parseFloat(salary) : null,
+        bankName: bankName || null,
+        routingNumber: routingNumber || null,
+        accountLast4: accountLast4 || null,
+        ssnLast4: ssnLast4 || null,
+        status: 'active',
+      }
+    });
+    
+    res.status(201).json(employee);
+  } catch (error) {
+    console.error('Error creating employee:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// PUT Team Member
+app.put('/api/team/:id', async (req, res) => {
+  const { id } = req.params;
+  const { fullName, email: memberEmail, type, salary, bankName, routingNumber, accountLast4, ssnLast4, status } = req.body;
+  
+  try {
+    const employee = await prisma.employee.update({
+      where: { id },
+      data: {
+        fullName: fullName !== undefined ? fullName : undefined,
+        email: memberEmail !== undefined ? memberEmail : undefined,
+        type: type !== undefined ? type : undefined,
+        salary: salary !== undefined ? parseFloat(salary) : undefined,
+        bankName: bankName !== undefined ? bankName : undefined,
+        routingNumber: routingNumber !== undefined ? routingNumber : undefined,
+        accountLast4: accountLast4 !== undefined ? accountLast4 : undefined,
+        ssnLast4: ssnLast4 !== undefined ? ssnLast4 : undefined,
+        status: status !== undefined ? status : undefined,
+      }
+    });
+    
+    res.status(200).json(employee);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// DELETE Team Member
+app.delete('/api/team/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    await prisma.employee.delete({
+      where: { id }
+    });
+    
+    res.status(200).json({ message: 'Employee deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * AMEX / Payments Endpoints
+ */
+
+// GET AMEX Card
+app.get('/api/payments/amex', async (req, res) => {
+  try {
+    const card = await prisma.amexCard.findFirst({
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.status(200).json(card || { connected: false });
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// PUT AMEX Card
+app.put('/api/payments/amex', async (req, res) => {
+  const { last4, cardName, expiryMonth, expiryYear, token } = req.body;
+  
+  try {
+    // Delete old cards
+    await prisma.amexCard.deleteMany({});
+    
+    const card = await prisma.amexCard.create({
+      data: {
+        last4,
+        cardName,
+        expiryMonth: expiryMonth ? parseInt(expiryMonth) : null,
+        expiryYear: expiryYear ? parseInt(expiryYear) : null,
+        token: token || null,
+        connected: true,
+      }
+    });
+    
+    res.status(200).json(card);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET Billing History
+app.get('/api/billing/history', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: {
+            billingHistory: {
+              orderBy: { date: 'desc' }
+            }
+          }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    res.status(200).json(user.company.billingHistory);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Subscriptions / Tiers Endpoints
+ */
+
+// GET Subscriptions
+app.get('/api/subscriptions', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: { subscriptions: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    let subscription = user.company.subscriptions[0];
+    
+    // Create default subscription if doesn't exist
+    if (!subscription) {
+      subscription = await prisma.subscription.create({
+        data: {
+          companyId: user.company.id,
+          payrollEnabled: false,
+          taxEnabled: false,
+          advisoryEnabled: false,
+        }
+      });
+    }
+    
+    res.status(200).json(subscription);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// PUT Subscriptions
+app.put('/api/subscriptions', async (req, res) => {
+  const { email, payrollEnabled, taxEnabled, advisoryEnabled } = req.body;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: {
+          include: { subscriptions: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    let subscription = user.company.subscriptions[0];
+    
+    if (subscription) {
+      // Check commitment dates before allowing disable
+      const now = new Date();
+      const canDisablePayroll = !subscription.commitmentEndDate || now >= subscription.commitmentEndDate;
+      
+      const updateData: any = {};
+      
+      if (payrollEnabled !== undefined) {
+        if (payrollEnabled && !subscription.payrollEnabled) {
+          // Enabling - set commitment
+          updateData.payrollEnabled = true;
+          updateData.startDate = new Date();
+          updateData.commitmentEndDate = new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000); // 6 months
+        } else if (!payrollEnabled && subscription.payrollEnabled) {
+          // Disabling - check commitment
+          if (canDisablePayroll) {
+            updateData.payrollEnabled = false;
+          } else {
+            return res.status(400).json({ 
+              message: 'Cannot disable payroll before commitment end date',
+              commitmentEndDate: subscription.commitmentEndDate
+            });
+          }
+        }
+      }
+      
+      if (taxEnabled !== undefined) updateData.taxEnabled = taxEnabled;
+      if (advisoryEnabled !== undefined) updateData.advisoryEnabled = advisoryEnabled;
+      
+      subscription = await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: updateData
+      });
+    } else {
+      // Create new subscription
+      subscription = await prisma.subscription.create({
+        data: {
+          companyId: user.company.id,
+          payrollEnabled: payrollEnabled ?? false,
+          taxEnabled: taxEnabled ?? false,
+          advisoryEnabled: advisoryEnabled ?? false,
+          startDate: payrollEnabled ? new Date() : null,
+          commitmentEndDate: payrollEnabled ? new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000) : null,
+        }
+      });
+    }
+    
+    res.status(200).json(subscription);
+  } catch (error) {
+    console.error('Error updating subscriptions:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Payroll Endpoints
+ */
+
+// GET Payroll Schedule
+app.get('/api/payroll/schedule', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: { payrollSchedule: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    res.status(200).json(user.company.payrollSchedule || null);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// PUT Payroll Schedule
+app.put('/api/payroll/schedule', async (req, res) => {
+  const { email, frequency, dayOfWeek, dayOfMonth } = req.body;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: {
+          include: { payrollSchedule: true }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    // Calculate next payroll date based on frequency
+    const calculateNextPayroll = () => {
+      const now = new Date();
+      // Simplified calculation - would need more sophisticated logic in production
+      if (frequency === 'weekly') {
+        return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      } else if (frequency === 'biweekly') {
+        return new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      } else {
+        return new Date(now.getFullYear(), now.getMonth() + 1, dayOfMonth || 1);
+      }
+    };
+    
+    let schedule;
+    if (user.company.payrollSchedule) {
+      schedule = await prisma.payrollSchedule.update({
+        where: { id: user.company.payrollSchedule.id },
+        data: {
+          frequency: frequency || user.company.payrollSchedule.frequency,
+          dayOfWeek: dayOfWeek !== undefined ? (dayOfWeek ? parseInt(dayOfWeek) : null) : user.company.payrollSchedule.dayOfWeek,
+          dayOfMonth: dayOfMonth !== undefined ? (dayOfMonth ? parseInt(dayOfMonth) : null) : user.company.payrollSchedule.dayOfMonth,
+          nextPayrollDate: calculateNextPayroll(),
+        }
+      });
+    } else {
+      schedule = await prisma.payrollSchedule.create({
+        data: {
+          companyId: user.company.id,
+          frequency: frequency || 'biweekly',
+          dayOfWeek: dayOfWeek ? parseInt(dayOfWeek) : null,
+          dayOfMonth: dayOfMonth ? parseInt(dayOfMonth) : null,
+          nextPayrollDate: calculateNextPayroll(),
+        }
+      });
+    }
+    
+    res.status(200).json(schedule);
+  } catch (error) {
+    console.error('Error updating payroll schedule:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET Upcoming Payroll
+app.get('/api/payroll/upcoming', async (req, res) => {
+  const { email } = req.query;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email as string },
+      include: {
+        company: {
+          include: {
+            payrollSchedule: true,
+            employees: true
+          }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    const activeEmployees = user.company.employees.filter(e => e.status === 'active');
+    const totalAmount = activeEmployees.reduce((sum, e) => sum + (e.salary || 0), 0);
+    
+    res.status(200).json({
+      nextDate: user.company.payrollSchedule?.nextPayrollDate || null,
+      totalAmount,
+      employeeCount: activeEmployees.length,
+      employees: activeEmployees,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// POST Run Payroll
+app.post('/api/payroll/run', async (req, res) => {
+  const { email } = req.body;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: {
+          include: {
+            employees: true,
+            payrollSchedule: true
+          }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    const activeEmployees = user.company.employees.filter(e => e.status === 'active');
+    const totalAmount = activeEmployees.reduce((sum, e) => sum + (e.salary || 0), 0);
+    
+    // Create billing history record
+    await prisma.billingHistory.create({
+      data: {
+        companyId: user.company.id,
+        date: new Date(),
+        description: `Payroll - ${activeEmployees.length} employees`,
+        amount: totalAmount,
+        status: 'paid',
+      }
+    });
+    
+    // Update next payroll date
+    if (user.company.payrollSchedule) {
+      const schedule = user.company.payrollSchedule;
+      const nextDate = new Date();
+      if (schedule.frequency === 'weekly') {
+        nextDate.setDate(nextDate.getDate() + 7);
+      } else if (schedule.frequency === 'biweekly') {
+        nextDate.setDate(nextDate.getDate() + 14);
+      } else {
+        nextDate.setMonth(nextDate.getMonth() + 1);
+      }
+      
+      await prisma.payrollSchedule.update({
+        where: { id: schedule.id },
+        data: { nextPayrollDate: nextDate }
+      });
+    }
+    
+    res.status(200).json({
+      message: 'Payroll run successfully',
+      amount: totalAmount,
+      employeeCount: activeEmployees.length,
+    });
+  } catch (error) {
+    console.error('Error running payroll:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * Advisory Sessions Endpoints
+ */
+
+// GET Advisory Sessions
+app.get('/api/advisory', async (req, res) => {
+  try {
+    const sessions = await prisma.advisorySession.findMany({
+      where: {
+        date: { gte: new Date() }
+      },
+      orderBy: { date: 'asc' }
+    });
+    
+    res.status(200).json(sessions);
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// POST Advisory Session
+app.post('/api/advisory', async (req, res) => {
+  const { type, date, time, duration, advisor, meetingLink } = req.body;
+  
+  try {
+    const session = await prisma.advisorySession.create({
+      data: {
+        type,
+        date: new Date(date),
+        time,
+        duration: parseInt(duration),
+        advisor: advisor || 'CLEVIO Advisor',
+        status: 'scheduled',
+        meetingLink: meetingLink || null,
+      }
+    });
+    
+    res.status(201).json(session);
+  } catch (error) {
+    console.error('Error creating advisory session:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
  * Health Check Endpoint
  * GET /api/health
  */
