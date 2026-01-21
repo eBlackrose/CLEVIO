@@ -19,6 +19,10 @@ dotenv.config();
 // Initialize Prisma Client
 const prisma = new PrismaClient();
 
+// Business Rules Constants
+const MIN_TEAM_MEMBERS_FOR_SERVICES = 5;
+const COMMITMENT_MONTHS = 6;
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const isDev = process.env.NODE_ENV !== 'production';
@@ -1064,13 +1068,28 @@ app.put('/api/subscriptions', async (req, res) => {
       where: { email },
       include: {
         company: {
-          include: { subscriptions: true }
+          include: { 
+            subscriptions: true,
+            employees: true 
+          }
         }
       }
     });
     
     if (!user?.company) {
       return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    // Business Rule: Check minimum team members
+    const activeEmployees = user.company.employees.filter(e => e.status === 'active');
+    if (activeEmployees.length < MIN_TEAM_MEMBERS_FOR_SERVICES) {
+      if (payrollEnabled || advisoryEnabled) {
+        return res.status(400).json({ 
+          message: `You need at least ${MIN_TEAM_MEMBERS_FOR_SERVICES} team members to activate payroll or advisory services`,
+          currentTeamSize: activeEmployees.length,
+          required: MIN_TEAM_MEMBERS_FOR_SERVICES
+        });
+      }
     }
     
     let subscription = user.company.subscriptions[0];
@@ -1087,15 +1106,19 @@ app.put('/api/subscriptions', async (req, res) => {
           // Enabling - set commitment
           updateData.payrollEnabled = true;
           updateData.startDate = new Date();
-          updateData.commitmentEndDate = new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000); // 6 months
+          updateData.commitmentEndDate = new Date(Date.now() + COMMITMENT_MONTHS * 30 * 24 * 60 * 60 * 1000);
+          console.log(`✅ Payroll enabled with ${COMMITMENT_MONTHS}-month commitment`);
         } else if (!payrollEnabled && subscription.payrollEnabled) {
           // Disabling - check commitment
           if (canDisablePayroll) {
             updateData.payrollEnabled = false;
+            console.log(`✅ Payroll disabled (commitment period ended)`);
           } else {
+            const daysRemaining = Math.ceil((subscription.commitmentEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
             return res.status(400).json({ 
-              message: 'Cannot disable payroll before commitment end date',
-              commitmentEndDate: subscription.commitmentEndDate
+              message: `Cannot disable payroll before commitment end date (${daysRemaining} days remaining)`,
+              commitmentEndDate: subscription.commitmentEndDate,
+              daysRemaining
             });
           }
         }
@@ -1117,7 +1140,7 @@ app.put('/api/subscriptions', async (req, res) => {
           taxEnabled: taxEnabled ?? false,
           advisoryEnabled: advisoryEnabled ?? false,
           startDate: payrollEnabled ? new Date() : null,
-          commitmentEndDate: payrollEnabled ? new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000) : null,
+          commitmentEndDate: payrollEnabled ? new Date(Date.now() + COMMITMENT_MONTHS * 30 * 24 * 60 * 60 * 1000) : null,
         }
       });
     }
@@ -1264,7 +1287,8 @@ app.post('/api/payroll/run', async (req, res) => {
         company: {
           include: {
             employees: true,
-            payrollSchedule: true
+            payrollSchedule: true,
+            subscriptions: true
           }
         }
       }
@@ -1274,19 +1298,59 @@ app.post('/api/payroll/run', async (req, res) => {
       return res.status(404).json({ message: 'Company not found' });
     }
     
+    // Business Rule: Check payroll requirements
+    const subscription = user.company.subscriptions[0];
+    if (!subscription?.payrollEnabled) {
+      return res.status(400).json({ 
+        message: 'Payroll service is not enabled',
+        hint: 'Enable payroll in Services & Subscriptions first'
+      });
+    }
+    
+    // Business Rule: Check AMEX card connected
+    const amexCard = await prisma.amexCard.findFirst({
+      where: { connected: true }
+    });
+    if (!amexCard) {
+      return res.status(400).json({ 
+        message: 'AMEX card not connected',
+        hint: 'Connect your AMEX card in Payments to run payroll'
+      });
+    }
+    
+    // Business Rule: Check minimum team members
     const activeEmployees = user.company.employees.filter(e => e.status === 'active');
+    if (activeEmployees.length < MIN_TEAM_MEMBERS_FOR_SERVICES) {
+      return res.status(400).json({ 
+        message: `You need at least ${MIN_TEAM_MEMBERS_FOR_SERVICES} team members to run payroll`,
+        currentTeamSize: activeEmployees.length,
+        required: MIN_TEAM_MEMBERS_FOR_SERVICES
+      });
+    }
+    
     const totalAmount = activeEmployees.reduce((sum, e) => sum + (e.salary || 0), 0);
+    
+    // Business Rule: Calculate fee based on active tiers
+    let feePercent = 0;
+    if (subscription.payrollEnabled) feePercent += 2;
+    if (subscription.taxEnabled) feePercent += 2;
+    if (subscription.advisoryEnabled) feePercent += 1;
+    
+    const fee = totalAmount * (feePercent / 100);
+    const totalWithFee = totalAmount + fee;
     
     // Create billing history record
     await prisma.billingHistory.create({
       data: {
         companyId: user.company.id,
         date: new Date(),
-        description: `Payroll - ${activeEmployees.length} employees`,
-        amount: totalAmount,
+        description: `Payroll - ${activeEmployees.length} employees (${feePercent}% fee)`,
+        amount: totalWithFee,
         status: 'paid',
       }
     });
+    
+    console.log(`✅ Payroll run: $${totalAmount.toFixed(2)} + $${fee.toFixed(2)} fee = $${totalWithFee.toFixed(2)}`);
     
     // Update next payroll date
     if (user.company.payrollSchedule) {
@@ -1308,7 +1372,10 @@ app.post('/api/payroll/run', async (req, res) => {
     
     res.status(200).json({
       message: 'Payroll run successfully',
-      amount: totalAmount,
+      payrollAmount: totalAmount,
+      fee: fee,
+      totalCharged: totalWithFee,
+      feePercent: feePercent,
       employeeCount: activeEmployees.length,
     });
   } catch (error) {
@@ -1339,9 +1406,46 @@ app.get('/api/advisory', async (req, res) => {
 
 // POST Advisory Session
 app.post('/api/advisory', async (req, res) => {
-  const { type, date, time, duration, advisor, meetingLink } = req.body;
+  const { email, type, date, time, duration, advisor, meetingLink } = req.body;
   
   try {
+    // Business Rule: Check advisory requirements
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: {
+          include: {
+            employees: true,
+            subscriptions: true
+          }
+        }
+      }
+    });
+    
+    if (!user?.company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    const subscription = user.company.subscriptions[0];
+    const activeEmployees = user.company.employees.filter(e => e.status === 'active');
+    
+    // Business Rule: Advisory requires 5+ team members AND (tax OR advisory tier active)
+    if (activeEmployees.length < MIN_TEAM_MEMBERS_FOR_SERVICES) {
+      return res.status(400).json({ 
+        message: `Advisory sessions require at least ${MIN_TEAM_MEMBERS_FOR_SERVICES} team members`,
+        currentTeamSize: activeEmployees.length,
+        required: MIN_TEAM_MEMBERS_FOR_SERVICES,
+        hint: 'Add more team members in Employees & Contractors'
+      });
+    }
+    
+    if (!subscription?.taxEnabled && !subscription?.advisoryEnabled) {
+      return res.status(400).json({ 
+        message: 'Advisory sessions require Tax or Advisory service to be enabled',
+        hint: 'Enable Tax or Advisory tier in Services & Subscriptions'
+      });
+    }
+    
     const session = await prisma.advisorySession.create({
       data: {
         type,
@@ -1353,6 +1457,8 @@ app.post('/api/advisory', async (req, res) => {
         meetingLink: meetingLink || null,
       }
     });
+    
+    console.log(`✅ Advisory session scheduled: ${type} on ${date} at ${time}`);
     
     res.status(201).json(session);
   } catch (error) {
