@@ -1128,7 +1128,7 @@ app.put('/api/subscriptions', async (req, res) => {
       const now = new Date();
       const canDisablePayroll = !subscription.commitmentEndDate || now >= subscription.commitmentEndDate;
       
-      const updateData: any = {};
+      const updateData = {};
       
       if (payrollEnabled !== undefined) {
         if (payrollEnabled && !subscription.payrollEnabled) {
