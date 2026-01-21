@@ -1,0 +1,228 @@
+// Prisma schema file for CLEVIO backend
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  verified      Boolean   @default(false)
+  role          String    @default("user") // "user" or "admin"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  company       Company?
+  otpCodes      OTPCode[]
+}
+
+// OTP/Verification Code model
+model OTPCode {
+  id         String   @id @default(uuid())
+  email      String
+  code       String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+  
+  // Relations
+  user       User?    @relation(fields: [email], references: [email], onDelete: Cascade)
+  
+  @@index([email])
+}
+
+// Company model
+model Company {
+  id              String   @id @default(uuid())
+  name            String
+  ein             String?
+  businessAddress String?
+  city            String?
+  state           String?
+  zipCode         String?
+  phone           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Owner/User relation
+  ownerId         String   @unique
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  employees       Employee[]
+  subscriptions   Subscription[]
+  payrollSchedule PayrollSchedule?
+  billingHistory  BillingHistory[]
+  notificationPreferences NotificationPreferences?
+}
+
+// Contact Info (stored in Company or separately)
+model ContactInfo {
+  id         String @id @default(uuid())
+  firstName  String
+  lastName   String
+  phone      String
+  email      String
+  
+  @@index([email])
+}
+
+// Employee or Contractor model
+model Employee {
+  id            String   @id @default(uuid())
+  type          String   // "employee" or "contractor"
+  fullName      String
+  email         String
+  
+  // Secure fields - store encrypted or last4 only
+  ssnLast4      String?
+  ssnEncrypted  String?  // For full SSN if needed, encrypted
+  einEncrypted  String?  // For contractors
+  
+  // Bank info
+  bankName      String?
+  routingNumber String?
+  accountLast4  String?
+  
+  // Compensation
+  salary        Float?   // Annual salary or rate
+  
+  // Status
+  status        String   @default("active") // "active" or "inactive"
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId])
+}
+
+// Subscription/Tiers model
+model Subscription {
+  id                 String    @id @default(uuid())
+  
+  // Tier flags
+  payrollEnabled     Boolean   @default(false)
+  taxEnabled         Boolean   @default(false)
+  advisoryEnabled    Boolean   @default(false)
+  
+  // Rates (percentage)
+  payrollRate        Float     @default(2.0)
+  taxRate            Float     @default(2.0)
+  advisoryRate       Float     @default(1.0)
+  
+  // Commitment tracking
+  startDate          DateTime?
+  commitmentEndDate  DateTime? // 6 months from activation
+  
+  // Timestamps
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  
+  // Relations
+  companyId          String    @unique
+  company            Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Payroll Schedule model
+model PayrollSchedule {
+  id             String   @id @default(uuid())
+  frequency      String   // "weekly", "biweekly", "monthly"
+  dayOfWeek      Int?     // 0-6 for weekly/biweekly
+  dayOfMonth     Int?     // 1-31 for monthly
+  nextPayrollDate DateTime?
+  
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  companyId      String   @unique
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Advisory Sessions model
+model AdvisorySession {
+  id          String   @id @default(uuid())
+  type        String   // "tax", "financial", "compliance"
+  date        DateTime
+  time        String
+  duration    Int      // minutes
+  advisor     String
+  status      String   // "scheduled", "completed", "cancelled"
+  meetingLink String?
+  notes       String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([date])
+}
+
+// Notification Preferences model
+model NotificationPreferences {
+  id                     String  @id @default(uuid())
+  payrollReminders       Boolean @default(true)
+  advisoryReminders      Boolean @default(true)
+  paymentConfirmations   Boolean @default(true)
+  monthlyReports         Boolean @default(true)
+  
+  // Relations
+  companyId              String  @unique
+  company                Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Billing History model
+model BillingHistory {
+  id          String   @id @default(uuid())
+  date        DateTime
+  description String
+  amount      Float
+  status      String   // "paid", "pending", "failed"
+  invoiceUrl  String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId, date])
+}
+
+// AMEX Card Info model
+model AmexCard {
+  id         String   @id @default(uuid())
+  last4      String
+  cardName   String
+  expiryMonth Int?
+  expiryYear  Int?
+  
+  // Token/placeholder for actual card connection
+  token      String?
+  
+  // Status
+  connected  Boolean  @default(false)
+  
+  // Timestamps
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@index([last4])
+}
