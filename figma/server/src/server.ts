@@ -452,7 +452,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     await prisma.oTPCode.delete({ where: { id: storedOtp.id } });
     
     const user = await prisma.user.update({
-      where: { id: req.user!.id },
+      where: { email },
       data: { verified: true },
       include: { company: true }
     });
@@ -549,7 +549,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     }
     
     // Delete old codes
-    await prisma.oTPCode.deleteMany({ where: { id: req.user!.id } });
+    await prisma.oTPCode.deleteMany({ where: { email } });
     
     // Generate new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
