@@ -23,15 +23,15 @@ export default defineConfig({
 
   webServer: [
     {
-      command: 'cd server && NODE_ENV=test ENABLE_TEST_ROUTES=true npm run dev',
+      command: 'cd server && NODE_ENV=development ENABLE_TEST_ROUTES=true npm run dev',
       url: 'http://localhost:3001/api/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true, // Always reuse existing servers
       timeout: 30000,
     },
     {
       command: 'npm run dev',
       url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true, // Always reuse existing servers
       timeout: 30000,
     },
   ],

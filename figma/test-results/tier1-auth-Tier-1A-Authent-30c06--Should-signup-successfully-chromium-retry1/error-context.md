@@ -1,0 +1,92 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - region "Notifications alt+T"
+  - navigation [ref=e7]:
+    - generic [ref=e9]:
+      - link "CLEVIO" [ref=e10] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e11]:
+        - link "How It Works" [ref=e12] [cursor=pointer]:
+          - /url: /how-it-works
+        - link "Pricing" [ref=e13] [cursor=pointer]:
+          - /url: /pricing
+        - link "FAQs" [ref=e14] [cursor=pointer]:
+          - /url: /faqs
+      - generic [ref=e15]:
+        - link "Sign In" [ref=e16] [cursor=pointer]:
+          - /url: /signin
+        - link "Create Account" [ref=e17] [cursor=pointer]:
+          - /url: /signup
+  - main [ref=e18]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - heading "Create Account" [level=1] [ref=e22]
+        - paragraph [ref=e23]: Join CLEVIO and transform your payroll and financial operations
+      - generic [ref=e24]:
+        - generic [ref=e26]: "1"
+        - generic [ref=e29]: "2"
+        - generic [ref=e32]: "3"
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: Company Name
+          - textbox "Your Company Inc." [ref=e36]
+        - generic [ref=e37]:
+          - generic [ref=e38]: Email Address
+          - textbox "you@company.com" [ref=e39]
+        - generic [ref=e40]:
+          - generic [ref=e41]: Password
+          - textbox "••••••••" [ref=e42]
+          - paragraph [ref=e43]: Must be at least 8 characters
+        - button "Continue" [ref=e44]
+      - paragraph [ref=e45]:
+        - text: Already have an account?
+        - link "Sign In" [ref=e46] [cursor=pointer]:
+          - /url: /signin
+  - contentinfo [ref=e47]:
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - generic [ref=e51]: CLEVIO
+          - paragraph [ref=e52]: AMEX-powered payroll and strategic financial services for sophisticated businesses.
+        - generic [ref=e53]:
+          - heading "Platform" [level=4] [ref=e54]
+          - list [ref=e55]:
+            - listitem [ref=e56]:
+              - link "How It Works" [ref=e57] [cursor=pointer]:
+                - /url: /how-it-works
+            - listitem [ref=e58]:
+              - link "Pricing" [ref=e59] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e60]:
+              - link "Customer Portal" [ref=e61] [cursor=pointer]:
+                - /url: /portal
+        - generic [ref=e62]:
+          - heading "Resources" [level=4] [ref=e63]
+          - list [ref=e64]:
+            - listitem [ref=e65]:
+              - link "FAQs" [ref=e66] [cursor=pointer]:
+                - /url: /faqs
+            - listitem [ref=e67]:
+              - link "Trust & Compliance" [ref=e68] [cursor=pointer]:
+                - /url: /compliance
+            - listitem [ref=e69]:
+              - link "Terms & Conditions" [ref=e70] [cursor=pointer]:
+                - /url: /terms
+            - listitem [ref=e71]:
+              - link "Privacy Policy" [ref=e72] [cursor=pointer]:
+                - /url: /privacy
+        - generic [ref=e73]:
+          - heading "Account" [level=4] [ref=e74]
+          - list [ref=e75]:
+            - listitem [ref=e76]:
+              - link "Sign In" [ref=e77] [cursor=pointer]:
+                - /url: /signin
+            - listitem [ref=e78]:
+              - link "Create Account" [ref=e79] [cursor=pointer]:
+                - /url: /signup
+      - generic [ref=e81]:
+        - paragraph [ref=e82]: © 2026 CLEVIO. All services provided by properly licensed and insured professionals.
+        - paragraph [ref=e83]: CLEVIO is a financial services platform, not a bank.
+```
