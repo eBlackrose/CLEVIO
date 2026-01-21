@@ -1,0 +1,56 @@
+version: '3.8'
+
+# Development docker-compose with hot reload
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: clevio-postgres-dev
+    environment:
+      POSTGRES_USER: clevio
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: clevio_dev
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./figma/server
+      dockerfile: Dockerfile.dev
+    container_name: clevio-backend-dev
+    depends_on:
+      - postgres
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://clevio:devpassword@postgres:5432/clevio_dev
+      JWT_SECRET: dev-secret-key-not-for-production
+      EMAIL_MODE: log
+      APP_BASE_URL: http://localhost:5173
+    volumes:
+      - ./figma/server/src:/app/src
+      - ./figma/server/prisma:/app/prisma
+    ports:
+      - "3001:3001"
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  frontend:
+    build:
+      context: ./figma
+      dockerfile: Dockerfile.dev
+    container_name: clevio-frontend-dev
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:3001
+      VITE_APP_BASE_URL: http://localhost:5173
+    volumes:
+      - ./figma/src:/app/src
+      - ./figma/public:/app/public
+    ports:
+      - "5173:5173"
+    command: npm run dev
+
+volumes:
+  postgres_dev_data:

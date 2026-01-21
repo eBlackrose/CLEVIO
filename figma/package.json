@@ -8,7 +8,10 @@
     "dev": "vite",
     "typecheck": "npx tsc --noEmit",
     "preview": "vite preview",
-    "test": "echo \"Build test passed\" && npm run build"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

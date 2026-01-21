@@ -6,7 +6,7 @@
  * with comprehensive debug logging for troubleshooting.
  */
 
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import sgMail from '@sendgrid/mail';
@@ -14,6 +14,15 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+
+// Extend Express Request to include requestId
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+    }
+  }
+}
 
 // Load environment variables
 dotenv.config();
@@ -30,11 +39,11 @@ const PORT = process.env.PORT || 3001;
 const isDev = process.env.NODE_ENV !== 'production';
 
 // Email configuration
-const EMAIL_MODE = process.env.EMAIL_MODE || 'log'; // 'log' or 'sendgrid'
-const EMAIL_FROM = process.env.SENDGRID_FROM_EMAIL || 'noreply@clevio.com';
-const OTP_EXP_MINUTES = parseInt(process.env.OTP_EXP_MINUTES) || 10;
-const OTP_MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_ATTEMPTS) || 5;
-const OTP_RESEND_COOLDOWN = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 30;
+const EMAIL_MODE: 'log' | 'sendgrid' = (process.env.EMAIL_MODE as 'log' | 'sendgrid') || 'log';
+const EMAIL_FROM: string = process.env.SENDGRID_FROM_EMAIL || 'noreply@clevio.com';
+const OTP_EXP_MINUTES: number = parseInt(process.env.OTP_EXP_MINUTES || '10');
+const OTP_MAX_ATTEMPTS: number = parseInt(process.env.OTP_MAX_ATTEMPTS || '5');
+const OTP_RESEND_COOLDOWN: number = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS || '30');
 
 // Security: Helmet for secure headers
 app.use(helmet({
@@ -68,7 +77,7 @@ const otpLimiter = rateLimit({
 });
 
 // Request logging middleware
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   const timestamp = new Date().toISOString();
   const requestId = Math.random().toString(36).substring(7);
   req.requestId = requestId;
