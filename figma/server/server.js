@@ -658,7 +658,7 @@ app.get('/api/user/me', async (req, res) => {
     }
     
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: {
@@ -734,7 +734,7 @@ app.get('/api/company', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: { company: true }
     });
     
@@ -791,7 +791,7 @@ app.get('/api/notifications', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: { notificationPreferences: true }
@@ -880,7 +880,7 @@ app.get('/api/team', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: { employees: true }
@@ -1024,7 +1024,7 @@ app.get('/api/billing/history', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: {
@@ -1056,7 +1056,7 @@ app.get('/api/subscriptions', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: { subscriptions: true }
@@ -1191,7 +1191,7 @@ app.get('/api/payroll/schedule', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: { payrollSchedule: true }
@@ -1276,7 +1276,7 @@ app.get('/api/payroll/upcoming', async (req, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { email: email as string },
+      where: { email: email },
       include: {
         company: {
           include: {
