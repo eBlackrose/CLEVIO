@@ -14,6 +14,8 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
+import { authenticate, requireAdmin, AuthRequest } from './middleware/authenticate';
 
 // Extend Express Request to include requestId
 declare global {
@@ -447,7 +449,18 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
       include: { company: true }
     });
     
-    console.log(`✅ 2FA verification successful for: ${email}`);
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        role: user.role 
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: '7d' } // Token valid for 7 days
+    );
+    
+    console.log(`✅ 2FA verification successful for: ${email} - JWT token generated`);
     console.log(`User authenticated:`, {
       email,
       firstName: user.firstName,
@@ -456,12 +469,16 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     console.groupEnd();
     
     res.status(200).json({ 
+      success: true,
       message: 'Verification successful',
+      token, // JWT token for authentication
       user: {
+        id: user.id,
         email,
         firstName: user.firstName,
         lastName: user.lastName,
         companyName: user.company?.name || '',
+        role: user.role,
       }
     });
     
@@ -655,19 +672,17 @@ app.post('/api/admin/login', authLimiter, async (req, res) => {
 /**
  * Get User Profile and Data
  * GET /api/user/me
+ * Protected: Requires JWT authentication
  */
-app.get('/api/user/me', async (req, res) => {
+app.get('/api/user/me', authenticate, async (req: AuthRequest, res) => {
   const requestId = req.requestId;
   
   try {
-    const { email } = req.query;
-    
-    if (!email) {
-      return res.status(400).json({ message: 'Email required' });
-    }
+    // Use authenticated user's ID from JWT token
+    const userId = req.user!.id;
     
     const user = await prisma.user.findUnique({
-      where: { email: email },
+      where: { id: userId },
       include: {
         company: {
           include: {
