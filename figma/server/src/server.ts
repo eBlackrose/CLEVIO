@@ -1029,17 +1029,35 @@ app.put('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
   const { last4, cardName, expiryMonth, expiryYear, token } = req.body;
   
   try {
-    // Delete old cards
-    await prisma.amexCard.deleteMany({});
+    // Get user's company
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: { company: true }
+    });
     
-    const card = await prisma.amexCard.create({
-      data: {
+    if (!user?.company) {
+      return res.status(400).json({ error: 'No company profile found' });
+    }
+    
+    // Upsert AMEX card for this company
+    const card = await prisma.amexCard.upsert({
+      where: { companyId: user.company.id },
+      update: {
         last4,
         cardName,
         expiryMonth: expiryMonth ? parseInt(expiryMonth) : null,
         expiryYear: expiryYear ? parseInt(expiryYear) : null,
         token: token || null,
         connected: true,
+      },
+      create: {
+        last4,
+        cardName,
+        expiryMonth: expiryMonth ? parseInt(expiryMonth) : null,
+        expiryYear: expiryYear ? parseInt(expiryYear) : null,
+        token: token || null,
+        connected: true,
+        companyId: user.company.id, // Link to company
       }
     });
     
@@ -1515,6 +1533,7 @@ app.post('/api/advisory', authenticate, async (req: AuthRequest, res) => {
         advisor: advisor || 'CLEVIO Advisor',
         status: 'scheduled',
         meetingLink: meetingLink || null,
+        companyId: user.company.id, // Link to company
       }
     });
     

@@ -64,6 +64,8 @@ model Company {
   payrollSchedule PayrollSchedule?
   billingHistory  BillingHistory[]
   notificationPreferences NotificationPreferences?
+  advisorySessions AdvisorySession[]
+  amexCard        AmexCard?
 }
 
 // Contact Info (stored in Company or separately)
@@ -167,11 +169,16 @@ model AdvisorySession {
   meetingLink String?
   notes       String?
   
+  // Relations
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
   // Timestamps
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   @@index([date])
+  @@index([companyId])
 }
 
 // Notification Preferences model
@@ -219,6 +226,10 @@ model AmexCard {
   
   // Status
   connected  Boolean  @default(false)
+  
+  // Relations
+  companyId  String   @unique
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   
   // Timestamps
   createdAt  DateTime @default(now())
