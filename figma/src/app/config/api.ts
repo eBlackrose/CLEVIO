@@ -1,0 +1,44 @@
+/**
+ * API Configuration
+ * 
+ * Controls whether to use the mock backend or real backend server.
+ * 
+ * TO ENABLE REAL EMAIL SENDING:
+ * 1. Set USE_REAL_BACKEND = true
+ * 2. Start the backend server: cd server && npm run dev
+ * 3. Make sure SendGrid is configured in server/.env
+ */
+
+// Set to true to use real backend with email sending
+export const USE_REAL_BACKEND = false;
+
+// Backend API URL (only used when USE_REAL_BACKEND is true)
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+/**
+ * Get the full API endpoint URL
+ */
+export function getApiUrl(endpoint: string): string {
+  if (USE_REAL_BACKEND) {
+    // Use real backend server
+    return `${API_BASE_URL}${endpoint}`;
+  } else {
+    // Use mock backend (intercepted by mock-backend.ts)
+    return endpoint;
+  }
+}
+
+/**
+ * API fetch wrapper with automatic URL handling
+ */
+export async function apiFetch(endpoint: string, options?: RequestInit): Promise<Response> {
+  const url = getApiUrl(endpoint);
+  
+  if (USE_REAL_BACKEND) {
+    console.log(`🌐 Real Backend API: ${options?.method || 'GET'} ${url}`);
+  } else {
+    console.log(`🔧 Mock Backend API: ${options?.method || 'GET'} ${endpoint}`);
+  }
+  
+  return fetch(url, options);
+}
