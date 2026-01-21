@@ -79,7 +79,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     
     setIsLoading(true);
     try {
-      const response = await apiFetch(`/api/user/me?email=${encodeURIComponent(email)}`);
+      const response = await apiFetch(`/api/user/me`);
       if (response.ok) {
         const data = await response.json();
         
@@ -174,6 +174,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   
   const clearUserData = () => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('authToken'); // Clear JWT token
     localStorage.removeItem('userLoggedIn');
     localStorage.removeItem('userEmail');
     setUserDataState(null);
