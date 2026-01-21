@@ -502,7 +502,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
  * Resend OTP Endpoint
  * POST /api/user/resend-otp
  */
-app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
+app.post('/api/user/resend-otp', otpLimiter, async (req: AuthRequest, res) => {
   const requestId = req.requestId;
   
   try {
@@ -968,7 +968,7 @@ app.post('/api/team', authenticate, async (req: AuthRequest, res) => {
 
 // PUT Team Member
 app.put('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { fullName, email: memberEmail, type, salary, bankName, routingNumber, accountLast4, ssnLast4, status } = req.body;
   
   try {
@@ -995,7 +995,7 @@ app.put('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
 
 // DELETE Team Member
 app.delete('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   
   try {
     await prisma.employee.delete({
