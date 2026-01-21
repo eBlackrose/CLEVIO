@@ -23,7 +23,7 @@ describe('Dashboard API', () => {
     });
 
     // Get OTP and verify
-    const otp = await prisma.otpCode.findFirst({
+    const otp = await prisma.oTPCode.findFirst({
       where: { email: authEmail },
       orderBy: { createdAt: 'desc' }
     });

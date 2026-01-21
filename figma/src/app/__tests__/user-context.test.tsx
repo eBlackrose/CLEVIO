@@ -9,11 +9,14 @@ import { UserProvider, useUser } from '../contexts/user-context';
 import React from 'react';
 
 // Mock the API client
-vi.mock('../utils/api-client', () => ({
+vi.mock('../config/api', () => ({
   apiFetch: vi.fn(),
+  USE_REAL_BACKEND: true,
+  API_BASE_URL: 'http://localhost:3001',
+  getApiUrl: (endpoint: string) => `http://localhost:3001${endpoint}`,
 }));
 
-import { apiFetch } from '../utils/api-client';
+import { apiFetch } from '../config/api';
 
 describe('UserContext', () => {
   beforeEach(() => {

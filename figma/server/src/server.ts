@@ -145,7 +145,8 @@ async function initializeTestAdmin() {
         console.log(`🔧 Development mode: Test admin already exists (${adminEmail})`);
       }
     } catch (error) {
-      console.error('Error creating test admin:', error.message);
+      const err = error as Error;
+      console.error('Error creating test admin:', err.message);
     }
   }
 }
@@ -177,7 +178,7 @@ app.post('/api/user/signup', authLimiter, async (req, res) => {
     
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { email }
     });
     
     if (existingUser) {
@@ -222,7 +223,7 @@ app.post('/api/user/signup', authLimiter, async (req, res) => {
     console.error(`❌ [${requestId}] Unexpected error in signup:`, error.message);
     console.error('Stack trace:', error.stack);
     console.groupEnd();
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -249,7 +250,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
     
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: { company: true }
     });
     
@@ -277,7 +278,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
     
     // Delete any existing OTP codes for this email
     await prisma.oTPCode.deleteMany({
-      where: { id: userId }
+      where: { email }
     });
     
     // Store OTP in database
@@ -356,7 +357,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
     console.error(`❌ [${requestId}] Unexpected error in login:`, error.message);
     console.error('Stack trace:', error.stack);
     console.groupEnd();
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -384,7 +385,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     
     // Get stored OTP from database
     const storedOtp = await prisma.oTPCode.findFirst({
-      where: { id: userId },
+      where: { id: req.user!.id },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -451,7 +452,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     await prisma.oTPCode.delete({ where: { id: storedOtp.id } });
     
     const user = await prisma.user.update({
-      where: { id: userId },
+      where: { id: req.user!.id },
       data: { verified: true },
       include: { company: true }
     });
@@ -493,7 +494,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     console.error(`❌ [${requestId}] Unexpected error in 2FA verification:`, error.message);
     console.error('Stack trace:', error.stack);
     console.groupEnd();
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -519,7 +520,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: req.user!.id }
     });
     
     if (!user) {
@@ -530,7 +531,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     
     // Check rate limiting (last code creation time)
     const lastCode = await prisma.oTPCode.findFirst({
-      where: { id: userId },
+      where: { id: req.user!.id },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -548,7 +549,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     }
     
     // Delete old codes
-    await prisma.oTPCode.deleteMany({ where: { id: userId } });
+    await prisma.oTPCode.deleteMany({ where: { id: req.user!.id } });
     
     // Generate new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -607,7 +608,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     console.error(`❌ [${requestId}] Unexpected error in resend:`, error.message);
     console.error('Stack trace:', error.stack);
     console.groupEnd();
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -634,7 +635,7 @@ app.post('/api/admin/login', authLimiter, async (req, res) => {
     
     // Check if admin exists
     const admin = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: req.user!.id }
     });
     
     console.log(`ADMIN lookup: ${admin ? 'Found' : 'Not found'}`);
@@ -672,7 +673,7 @@ app.post('/api/admin/login', authLimiter, async (req, res) => {
     console.error(`❌ [${requestId}] Unexpected error in ADMIN login:`, error.message);
     console.error('Stack trace:', error.stack);
     console.groupEnd();
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -689,7 +690,7 @@ app.get('/api/user/me', authenticate, async (req: AuthRequest, res) => {
     const userId = req.user!.id;
     
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: {
@@ -751,7 +752,7 @@ app.get('/api/user/me', authenticate, async (req: AuthRequest, res) => {
     });
   } catch (error) {
     console.error(`[${requestId}] Error getting user data:`, error.message);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -765,7 +766,7 @@ app.get('/api/company', authenticate, async (req: AuthRequest, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: { company: true }
     });
     
@@ -775,7 +776,7 @@ app.get('/api/company', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(user.company);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -785,7 +786,7 @@ app.put('/api/company', authenticate, async (req: AuthRequest, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: { company: true }
     });
     
@@ -808,7 +809,7 @@ app.put('/api/company', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(updated);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -822,7 +823,7 @@ app.get('/api/notifications', authenticate, async (req: AuthRequest, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { notificationPreferences: true }
@@ -850,7 +851,7 @@ app.get('/api/notifications', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(user.company.notificationPreferences);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -860,7 +861,7 @@ app.put('/api/notifications', authenticate, async (req: AuthRequest, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { notificationPreferences: true }
@@ -897,7 +898,7 @@ app.put('/api/notifications', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(prefs);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -911,7 +912,7 @@ app.get('/api/team', authenticate, async (req: AuthRequest, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { employees: true }
@@ -925,7 +926,7 @@ app.get('/api/team', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(user.company.employees);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -935,7 +936,7 @@ app.post('/api/team', authenticate, async (req: AuthRequest, res) => {
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: { company: true }
     });
     
@@ -961,7 +962,7 @@ app.post('/api/team', authenticate, async (req: AuthRequest, res) => {
     res.status(201).json(employee);
   } catch (error) {
     console.error('Error creating employee:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -988,7 +989,7 @@ app.put('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(employee);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -1003,7 +1004,7 @@ app.delete('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json({ message: 'Employee deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -1020,12 +1021,12 @@ app.get('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(card || { connected: false });
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // PUT AMEX Card
-app.put('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/payments/amex', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const { last4, cardName, expiryMonth, expiryYear, token } = req.body;
   
   try {
@@ -1063,17 +1064,17 @@ app.put('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(card);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // GET Billing History
-app.get('/api/billing/history', authenticate, async (req: AuthRequest, res) => {
+app.get('/api/billing/history', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const userId = req.user!.id;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: {
@@ -1091,7 +1092,7 @@ app.get('/api/billing/history', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(user.company.billingHistory);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -1100,12 +1101,12 @@ app.get('/api/billing/history', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Subscriptions
-app.get('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
+app.get('/api/subscriptions', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const userId = req.user!.id;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { subscriptions: true }
@@ -1133,17 +1134,17 @@ app.get('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(subscription);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // PUT Subscriptions
-app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const { email, payrollEnabled, taxEnabled, advisoryEnabled } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { 
@@ -1177,7 +1178,7 @@ app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
       const now = new Date();
       const canDisablePayroll = !subscription.commitmentEndDate || now >= subscription.commitmentEndDate;
       
-      const updateData = {};
+      const updateData: any = {};
       
       if (payrollEnabled !== undefined) {
         if (payrollEnabled && !subscription.payrollEnabled) {
@@ -1192,7 +1193,8 @@ app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
             updateData.payrollEnabled = false;
             console.log(`✅ Payroll disabled (commitment period ended)`);
           } else {
-            const daysRemaining = Math.ceil((subscription.commitmentEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            const commitmentDate = subscription.commitmentEndDate!;
+            const daysRemaining = Math.ceil((commitmentDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
             return res.status(400).json({ 
               message: `Cannot disable payroll before commitment end date (${daysRemaining} days remaining)`,
               commitmentEndDate: subscription.commitmentEndDate,
@@ -1226,7 +1228,7 @@ app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
     res.status(200).json(subscription);
   } catch (error) {
     console.error('Error updating subscriptions:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -1235,12 +1237,12 @@ app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Payroll Schedule
-app.get('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => {
+app.get('/api/payroll/schedule', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const userId = req.user!.id;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { payrollSchedule: true }
@@ -1254,17 +1256,17 @@ app.get('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => 
     
     res.status(200).json(user.company.payrollSchedule || null);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // PUT Payroll Schedule
-app.put('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/payroll/schedule', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const { email, frequency, dayOfWeek, dayOfMonth } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: { payrollSchedule: true }
@@ -1315,17 +1317,17 @@ app.put('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => 
     res.status(200).json(schedule);
   } catch (error) {
     console.error('Error updating payroll schedule:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // GET Upcoming Payroll
-app.get('/api/payroll/upcoming', authenticate, async (req: AuthRequest, res) => {
+app.get('/api/payroll/upcoming', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const userId = req.user!.id;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: {
@@ -1350,17 +1352,17 @@ app.get('/api/payroll/upcoming', authenticate, async (req: AuthRequest, res) => 
       employees: activeEmployees,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // POST Run Payroll
-app.post('/api/payroll/run', authenticate, async (req: AuthRequest, res) => {
+app.post('/api/payroll/run', authenticate, async (req: AuthRequest, res): Promise<any> => {
   const { email } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: {
@@ -1458,7 +1460,7 @@ app.post('/api/payroll/run', authenticate, async (req: AuthRequest, res) => {
     });
   } catch (error) {
     console.error('Error running payroll:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -1478,18 +1480,18 @@ app.get('/api/advisory', authenticate, async (req: AuthRequest, res) => {
     
     res.status(200).json(sessions);
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
 // POST Advisory Session
-app.post('/api/advisory', authenticate, async (req: AuthRequest, res) => {
-  const { email, type, date, time, duration, advisor, meetingLink } = req.body;
+app.post('/api/advisory', authenticate, async (req: AuthRequest, res): Promise<any> => {
+  const { type, date, time, duration, advisor, meetingLink } = req.body;
   
   try {
     // Business Rule: Check advisory requirements
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       include: {
         company: {
           include: {
@@ -1542,7 +1544,7 @@ app.post('/api/advisory', authenticate, async (req: AuthRequest, res) => {
     res.status(201).json(session);
   } catch (error) {
     console.error('Error creating advisory session:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' }); return;
   }
 });
 
@@ -1572,10 +1574,10 @@ app.use((req, res) => {
 /**
  * Global Error Handler
  */
-app.use((err, req, res, next) => {
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   console.error(`[${req.requestId}] ❌ Global error handler:`, err.message);
   console.error('Stack trace:', err.stack);
-  res.status(500).json({ message: 'Internal server error' });
+  res.status(500).json({ message: 'Internal server error' }); return;
 });
 
 /**

@@ -16,7 +16,7 @@ beforeAll(async () => {
   process.env.JWT_SECRET = 'test-secret-key-for-testing-only';
   
   // Clear test data
-  await prisma.otpCode.deleteMany();
+  await prisma.oTPCode.deleteMany();
   await prisma.billingHistory.deleteMany();
   await prisma.advisorySession.deleteMany();
   await prisma.payrollSchedule.deleteMany();

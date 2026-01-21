@@ -97,7 +97,7 @@ describe('Authentication API', () => {
         companyName: 'Login Test'
       });
 
-      const otp = await prisma.otpCode.findFirst({
+      const otp = await prisma.oTPCode.findFirst({
         where: { email: 'login-test@example.com' },
         orderBy: { createdAt: 'desc' }
       });
@@ -120,7 +120,7 @@ describe('Authentication API', () => {
       expect(res.body.message).toMatch(/OTP sent/i);
 
       // Verify OTP was created
-      const otp = await prisma.otpCode.findFirst({
+      const otp = await prisma.oTPCode.findFirst({
         where: { email: 'login-test@example.com' },
         orderBy: { createdAt: 'desc' }
       });
@@ -164,7 +164,7 @@ describe('Authentication API', () => {
         companyName: 'OTP Test'
       });
 
-      const otpRecord = await prisma.otpCode.findFirst({
+      const otpRecord = await prisma.oTPCode.findFirst({
         where: { email: 'otp-test@example.com' },
         orderBy: { createdAt: 'desc' }
       });
@@ -205,7 +205,7 @@ describe('Authentication API', () => {
           code: '111111'
         });
 
-      const otpRecord = await prisma.otpCode.findFirst({
+      const otpRecord = await prisma.oTPCode.findFirst({
         where: { email: 'otp-test@example.com' },
         orderBy: { createdAt: 'desc' }
       });
