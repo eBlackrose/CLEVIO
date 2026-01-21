@@ -250,7 +250,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
     
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { email },
       include: { company: true }
     });
     
@@ -385,7 +385,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     
     // Get stored OTP from database
     const storedOtp = await prisma.oTPCode.findFirst({
-      where: { id: req.user!.id },
+      where: { email },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -520,7 +520,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id }
+      where: { email }
     });
     
     if (!user) {
@@ -635,7 +635,7 @@ app.post('/api/admin/login', authLimiter, async (req, res) => {
     
     // Check if admin exists
     const admin = await prisma.user.findUnique({
-      where: { id: req.user!.id }
+      where: { email }
     });
     
     console.log(`ADMIN lookup: ${admin ? 'Found' : 'Not found'}`);
