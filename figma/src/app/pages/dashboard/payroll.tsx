@@ -235,7 +235,7 @@ export function PayrollPage() {
               <button
                 key={i}
                 onClick={() => day && handleDateSelect(day)}
-                disabled={!day || isPast}
+                disabled={!day || isPast || undefined}
                 className={`
                   aspect-square p-2 rounded text-sm transition-all
                   ${!day ? 'invisible' : ''}

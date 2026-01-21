@@ -230,7 +230,7 @@ export function SubscriptionConfirmationModal({
           <div className="mb-8">
             <div className="p-4 bg-accent/30 rounded-lg mb-4">
               <p className="text-sm leading-relaxed">
-                {disclosure.content}
+                {'content' in disclosure ? disclosure.content : ''}
               </p>
             </div>
             

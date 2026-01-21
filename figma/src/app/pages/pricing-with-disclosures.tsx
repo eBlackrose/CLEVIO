@@ -257,7 +257,8 @@ export function PricingWithDisclosuresPage() {
         </div>
         
         {/* Disclaimer Box */}
-        <DisclaimerBox variant="subtle" className="mb-12">
+        <div className="mb-12">
+        <DisclaimerBox variant="subtle">
           <p>
             CLEVIO is a financial services platform operated by CLEVIO Financial Services, LLC. We are not a bank. 
             Payment processing services are provided through partner financial institutions. Tax services are 
@@ -269,6 +270,7 @@ export function PricingWithDisclosuresPage() {
             {' '}for detailed information about licensing, insurance, and regulatory oversight.
           </p>
         </DisclaimerBox>
+        </div>
         
         {/* CTA */}
         <div className="text-center">

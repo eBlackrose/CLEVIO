@@ -97,7 +97,7 @@ export function SchemaData({ type, data }: SchemaDataProps) {
     };
     
     const scriptId = 'schema-org-data';
-    let scriptTag = document.getElementById(scriptId);
+    let scriptTag = document.getElementById(scriptId) as HTMLScriptElement | null;
     
     if (!scriptTag) {
       scriptTag = document.createElement('script');
