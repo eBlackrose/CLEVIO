@@ -18,6 +18,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Email configuration
+const EMAIL_MODE = process.env.EMAIL_MODE || 'log'; // 'log' or 'sendgrid'
+const EMAIL_FROM = process.env.SENDGRID_FROM_EMAIL || 'noreply@clevio.com';
+const OTP_EXP_MINUTES = parseInt(process.env.OTP_EXP_MINUTES) || 10;
+const OTP_MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_ATTEMPTS) || 5;
+const OTP_RESEND_COOLDOWN = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 30;
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -41,12 +48,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Configure SendGrid
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  console.log('✅ SendGrid API key configured');
+// Configure SendGrid (only if using sendgrid mode)
+if (EMAIL_MODE === 'sendgrid') {
+  if (process.env.SENDGRID_API_KEY) {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    console.log('✅ SendGrid API key configured');
+  } else {
+    console.warn('⚠️ EMAIL_MODE is sendgrid but SENDGRID_API_KEY not configured');
+  }
 } else {
-  console.warn('⚠️ SendGrid API key not configured - email sending will fail');
+  console.log('📧 Email mode: LOG (emails will be logged to console)');
 }
 
 // In-memory storage (replace with database in production)
@@ -56,13 +67,15 @@ const adminUsers = new Map();
 
 // Initialize with test admin (development only)
 if (isDev) {
-  adminUsers.set('admin@clevio.com', {
-    password: 'admin123',
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@clevio.com';
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+  adminUsers.set(adminEmail, {
+    password: adminPassword,
     firstName: 'Admin',
     lastName: 'User',
     role: 'admin',
   });
-  console.log('🔧 Development mode: Test admin created (admin@clevio.com / admin123)');
+  console.log(`🔧 Development mode: Test admin created (${adminEmail} / ${adminPassword})`);
 }
 
 /**
@@ -163,7 +176,7 @@ app.post('/api/user/login', async (req, res) => {
     
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+    const expiresAt = Date.now() + OTP_EXP_MINUTES * 60 * 1000;
     
     // Store OTP
     otpCodes.set(email, {
@@ -179,15 +192,15 @@ app.post('/api/user/login', async (req, res) => {
     }
     console.log(`OTP expires at: ${new Date(expiresAt).toISOString()}`);
     
-    // Send OTP via email (SendGrid)
+    // Send OTP via email
     try {
       console.log(`📧 Sending OTP email to ${email}...`);
       
       const msg = {
         to: email,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@clevio.com',
+        from: EMAIL_FROM,
         subject: 'CLEVIO - Your Verification Code',
-        text: `Your CLEVIO verification code is: ${otp}\n\nThis code expires in 5 minutes.\n\nIf you didn't request this code, please ignore this email.`,
+        text: `Your CLEVIO verification code is: ${otp}\n\nThis code expires in ${OTP_EXP_MINUTES} minutes.\n\nIf you didn't request this code, please ignore this email.`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #000;">CLEVIO Verification Code</h2>
@@ -195,33 +208,33 @@ app.post('/api/user/login', async (req, res) => {
             <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
               ${otp}
             </div>
-            <p style="color: #666;">This code expires in 5 minutes.</p>
+            <p style="color: #666;">This code expires in ${OTP_EXP_MINUTES} minutes.</p>
             <p style="color: #666; font-size: 12px;">If you didn't request this code, please ignore this email.</p>
           </div>
         `,
       };
       
-      if (process.env.SENDGRID_API_KEY) {
+      if (EMAIL_MODE === 'sendgrid' && process.env.SENDGRID_API_KEY) {
         await sgMail.send(msg);
         console.log(`✅ OTP email sent successfully to ${email}`);
       } else {
-        console.warn(`⚠️ SendGrid not configured - email not sent (dev mode)`);
-        if (isDev) {
-          console.log(`\n🔐 ═══════════════════════════════════════`);
-          console.log(`   DEV MODE: OTP CODE FOR ${email}`);
-          console.log(`   CODE: ${otp}`);
-          console.log(`   EXPIRES: ${new Date(expiresAt).toLocaleString()}`);
-          console.log(`═══════════════════════════════════════\n`);
-        }
+        // Log mode - log to console instead of sending email
+        console.log(`\n🔐 ═══════════════════════════════════════`);
+        console.log(`   EMAIL MODE: LOG`);
+        console.log(`   TO: ${email}`);
+        console.log(`   SUBJECT: ${msg.subject}`);
+        console.log(`   CODE: ${otp}`);
+        console.log(`   EXPIRES: ${new Date(expiresAt).toLocaleString()}`);
+        console.log(`═══════════════════════════════════════\n`);
       }
       
     } catch (emailError) {
-      console.error(`❌ SendGrid failed:`, emailError.message);
+      console.error(`❌ Email sending failed:`, emailError.message);
       if (emailError.response) {
         console.error('SendGrid response:', emailError.response.body);
       }
-      // Continue anyway in dev mode
-      if (!isDev) {
+      // In log mode or dev, continue anyway
+      if (EMAIL_MODE !== 'log' && !isDev) {
         console.groupEnd();
         return res.status(500).json({ message: 'Failed to send verification code' });
       }
@@ -293,8 +306,8 @@ app.post('/api/user/verify-2fa', async (req, res) => {
       return res.status(400).json({ message: 'Verification code expired. Please sign in again.' });
     }
     
-    // Check attempts (max 5)
-    if (storedOtp.attempts >= 5) {
+    // Check attempts (max configured)
+    if (storedOtp.attempts >= OTP_MAX_ATTEMPTS) {
       otpCodes.delete(email);
       console.error(`❌ 2FA failed - too many attempts for: ${email}`);
       console.groupEnd();
@@ -311,7 +324,7 @@ app.post('/api/user/verify-2fa', async (req, res) => {
     
     if (!codeMatches) {
       storedOtp.attempts += 1;
-      const attemptsRemaining = 5 - storedOtp.attempts;
+      const attemptsRemaining = OTP_MAX_ATTEMPTS - storedOtp.attempts;
       console.error(`❌ 2FA failed - invalid code for: ${email} (${attemptsRemaining} attempts remaining)`);
       console.groupEnd();
       return res.status(400).json({ 
@@ -423,7 +436,8 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    sendgridConfigured: !!process.env.SENDGRID_API_KEY,
+    emailMode: EMAIL_MODE,
+    sendgridConfigured: EMAIL_MODE === 'sendgrid' && !!process.env.SENDGRID_API_KEY,
   });
 });
 
@@ -452,7 +466,8 @@ app.listen(PORT, () => {
   console.log(`   CLEVIO Backend Server Started`);
   console.log(`   Port: ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   SendGrid configured: ${!!process.env.SENDGRID_API_KEY ? 'Yes' : 'No'}`);
+  console.log(`   Email Mode: ${EMAIL_MODE}`);
+  console.log(`   SendGrid configured: ${EMAIL_MODE === 'sendgrid' && !!process.env.SENDGRID_API_KEY ? 'Yes' : 'No'}`);
   console.log(`   Debug logging: ${isDev ? 'ENABLED' : 'Production mode'}`);
   console.log('═══════════════════════════════════════════════════════\n');
   
@@ -461,7 +476,7 @@ app.listen(PORT, () => {
     console.log('   - Verbose logging enabled');
     console.log('   - OTP codes visible in console');
     console.log('   - Test admin account available');
-    console.log('   - Email sending warnings visible\n');
+    console.log(`   - Email mode: ${EMAIL_MODE}\n`);
   }
   
   console.log('📋 Available Endpoints:');
