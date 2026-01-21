@@ -29,16 +29,32 @@ export function getApiUrl(endpoint: string): string {
 }
 
 /**
- * API fetch wrapper with automatic URL handling
+ * API fetch wrapper with automatic URL handling and JWT authentication
  */
 export async function apiFetch(endpoint: string, options?: RequestInit): Promise<Response> {
   const url = getApiUrl(endpoint);
   
+  // Get JWT token from localStorage
+  const token = localStorage.getItem('authToken');
+  
+  // Add Authorization header if token exists
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(options?.headers || {}),
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
   if (USE_REAL_BACKEND) {
-    console.log(`🌐 Real Backend API: ${options?.method || 'GET'} ${url}`);
+    console.log(`🌐 Real Backend API: ${options?.method || 'GET'} ${url}`, token ? '🔐 [Authenticated]' : '🔓 [Anonymous]');
   } else {
     console.log(`🔧 Mock Backend API: ${options?.method || 'GET'} ${endpoint}`);
   }
   
-  return fetch(url, options);
+  return fetch(url, {
+    ...options,
+    headers,
+  });
 }

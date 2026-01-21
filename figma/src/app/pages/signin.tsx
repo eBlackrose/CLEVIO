@@ -263,6 +263,13 @@ export function SignInPage() {
         console.log('✅ 2FA verification successful!');
         
         debugLog('Setting localStorage flags...');
+        
+        // Store JWT token for API authentication
+        if (data.token) {
+          localStorage.setItem('authToken', data.token);
+          debugLog('✓ localStorage.authToken = [JWT token stored]');
+        }
+        
         localStorage.setItem('userLoggedIn', 'true');
         debugLog('✓ localStorage.userLoggedIn = true');
         

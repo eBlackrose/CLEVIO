@@ -29,13 +29,6 @@ declare global {
 // Load environment variables
 dotenv.config();
 
-// Verify JWT_SECRET is set
-if (!process.env.JWT_SECRET) {
-  console.error('🚨 FATAL ERROR: JWT_SECRET environment variable is not set!');
-  console.error('Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
-  process.exit(1);
-}
-
 // Initialize Prisma Client
 const prisma = new PrismaClient();
 
@@ -177,7 +170,7 @@ app.post('/api/user/signup', authLimiter, async (req, res) => {
     
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { email }
     });
     
     if (existingUser) {
@@ -249,7 +242,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
     
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: { company: true }
     });
     
@@ -277,7 +270,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
     
     // Delete any existing OTP codes for this email
     await prisma.oTPCode.deleteMany({
-      where: { id: userId }
+      where: { email }
     });
     
     // Store OTP in database
@@ -384,7 +377,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     
     // Get stored OTP from database
     const storedOtp = await prisma.oTPCode.findFirst({
-      where: { id: userId },
+      where: { email },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -451,7 +444,7 @@ app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
     await prisma.oTPCode.delete({ where: { id: storedOtp.id } });
     
     const user = await prisma.user.update({
-      where: { id: userId },
+      where: { email },
       data: { verified: true },
       include: { company: true }
     });
@@ -519,7 +512,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { email }
     });
     
     if (!user) {
@@ -530,7 +523,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     
     // Check rate limiting (last code creation time)
     const lastCode = await prisma.oTPCode.findFirst({
-      where: { id: userId },
+      where: { email },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -548,7 +541,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     }
     
     // Delete old codes
-    await prisma.oTPCode.deleteMany({ where: { id: userId } });
+    await prisma.oTPCode.deleteMany({ where: { email } });
     
     // Generate new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -634,7 +627,7 @@ app.post('/api/admin/login', authLimiter, async (req, res) => {
     
     // Check if admin exists
     const admin = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { email }
     });
     
     console.log(`ADMIN lookup: ${admin ? 'Found' : 'Not found'}`);
@@ -760,12 +753,12 @@ app.get('/api/user/me', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Company
-app.get('/api/company', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/company', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: { company: true }
     });
     
@@ -780,12 +773,12 @@ app.get('/api/company', authenticate, async (req: AuthRequest, res) => {
 });
 
 // PUT Company
-app.put('/api/company', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/company', async (req, res) => {
   const { email, name, ein, businessAddress, city, state, zipCode, phone } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: { company: true }
     });
     
@@ -817,12 +810,12 @@ app.put('/api/company', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Notifications
-app.get('/api/notifications', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/notifications', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: {
         company: {
           include: { notificationPreferences: true }
@@ -855,12 +848,12 @@ app.get('/api/notifications', authenticate, async (req: AuthRequest, res) => {
 });
 
 // PUT Notifications
-app.put('/api/notifications', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/notifications', async (req, res) => {
   const { email, payrollReminders, advisoryReminders, paymentConfirmations, monthlyReports } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: {
         company: {
           include: { notificationPreferences: true }
@@ -906,12 +899,12 @@ app.put('/api/notifications', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Team
-app.get('/api/team', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/team', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: {
         company: {
           include: { employees: true }
@@ -930,12 +923,12 @@ app.get('/api/team', authenticate, async (req: AuthRequest, res) => {
 });
 
 // POST Team Member
-app.post('/api/team', authenticate, async (req: AuthRequest, res) => {
+app.post('/api/team', async (req, res) => {
   const { email, fullName, memberEmail, type, salary, bankName, routingNumber, accountLast4, ssnLast4 } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: { company: true }
     });
     
@@ -966,7 +959,7 @@ app.post('/api/team', authenticate, async (req: AuthRequest, res) => {
 });
 
 // PUT Team Member
-app.put('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/team/:id', async (req, res) => {
   const { id } = req.params;
   const { fullName, email: memberEmail, type, salary, bankName, routingNumber, accountLast4, ssnLast4, status } = req.body;
   
@@ -993,7 +986,7 @@ app.put('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
 });
 
 // DELETE Team Member
-app.delete('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
+app.delete('/api/team/:id', async (req, res) => {
   const { id } = req.params;
   
   try {
@@ -1012,7 +1005,7 @@ app.delete('/api/team/:id', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET AMEX Card
-app.get('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
+app.get('/api/payments/amex', async (req, res) => {
   try {
     const card = await prisma.amexCard.findFirst({
       orderBy: { createdAt: 'desc' }
@@ -1025,7 +1018,7 @@ app.get('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
 });
 
 // PUT AMEX Card
-app.put('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/payments/amex', async (req, res) => {
   const { last4, cardName, expiryMonth, expiryYear, token } = req.body;
   
   try {
@@ -1050,12 +1043,12 @@ app.put('/api/payments/amex', authenticate, async (req: AuthRequest, res) => {
 });
 
 // GET Billing History
-app.get('/api/billing/history', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/billing/history', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: {
         company: {
           include: {
@@ -1082,12 +1075,12 @@ app.get('/api/billing/history', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Subscriptions
-app.get('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/subscriptions', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: {
         company: {
           include: { subscriptions: true }
@@ -1120,12 +1113,12 @@ app.get('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
 });
 
 // PUT Subscriptions
-app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/subscriptions', async (req, res) => {
   const { email, payrollEnabled, taxEnabled, advisoryEnabled } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: {
         company: {
           include: { 
@@ -1217,12 +1210,12 @@ app.put('/api/subscriptions', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Payroll Schedule
-app.get('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/payroll/schedule', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: {
         company: {
           include: { payrollSchedule: true }
@@ -1241,12 +1234,12 @@ app.get('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => 
 });
 
 // PUT Payroll Schedule
-app.put('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => {
+app.put('/api/payroll/schedule', async (req, res) => {
   const { email, frequency, dayOfWeek, dayOfMonth } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: {
         company: {
           include: { payrollSchedule: true }
@@ -1302,12 +1295,12 @@ app.put('/api/payroll/schedule', authenticate, async (req: AuthRequest, res) => 
 });
 
 // GET Upcoming Payroll
-app.get('/api/payroll/upcoming', authenticate, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
+app.get('/api/payroll/upcoming', async (req, res) => {
+  const { email } = req.query;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email },
       include: {
         company: {
           include: {
@@ -1337,12 +1330,12 @@ app.get('/api/payroll/upcoming', authenticate, async (req: AuthRequest, res) => 
 });
 
 // POST Run Payroll
-app.post('/api/payroll/run', authenticate, async (req: AuthRequest, res) => {
+app.post('/api/payroll/run', async (req, res) => {
   const { email } = req.body;
   
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: {
         company: {
           include: {
@@ -1449,7 +1442,7 @@ app.post('/api/payroll/run', authenticate, async (req: AuthRequest, res) => {
  */
 
 // GET Advisory Sessions
-app.get('/api/advisory', authenticate, async (req: AuthRequest, res) => {
+app.get('/api/advisory', async (req, res) => {
   try {
     const sessions = await prisma.advisorySession.findMany({
       where: {
@@ -1465,13 +1458,13 @@ app.get('/api/advisory', authenticate, async (req: AuthRequest, res) => {
 });
 
 // POST Advisory Session
-app.post('/api/advisory', authenticate, async (req: AuthRequest, res) => {
+app.post('/api/advisory', async (req, res) => {
   const { email, type, date, time, duration, advisor, meetingLink } = req.body;
   
   try {
     // Business Rule: Check advisory requirements
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { email },
       include: {
         company: {
           include: {
@@ -1602,6 +1595,3 @@ process.on('SIGINT', async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
-
-// Export app for testing
-export { app };
