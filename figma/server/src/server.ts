@@ -531,7 +531,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     
     // Check rate limiting (last code creation time)
     const lastCode = await prisma.oTPCode.findFirst({
-      where: { id: req.user!.id },
+      where: { email },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -549,7 +549,7 @@ app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
     }
     
     // Delete old codes
-    await prisma.oTPCode.deleteMany({ where: { email } });
+    await prisma.oTPCode.deleteMany({ where: { id: req.user!.id } });
     
     // Generate new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
