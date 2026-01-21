@@ -1581,35 +1581,78 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 /**
- * Start Server
+ * TEST-ONLY ENDPOINT: Get latest OTP for testing
+ * SECURITY: Only enabled in test/development mode
  */
-app.listen(PORT, () => {
-  console.log('\n🚀 ═══════════════════════════════════════════════════════');
-  console.log(`   CLEVIO Backend Server Started`);
-  console.log(`   Port: ${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   Email Mode: ${EMAIL_MODE}`);
-  console.log(`   SendGrid configured: ${EMAIL_MODE === 'sendgrid' && !!process.env.SENDGRID_API_KEY ? 'Yes' : 'No'}`);
-  console.log(`   Debug logging: ${isDev ? 'ENABLED' : 'Production mode'}`);
-  console.log('═══════════════════════════════════════════════════════\n');
+if (process.env.NODE_ENV === 'test' || process.env.ENABLE_TEST_ROUTES === 'true') {
+  app.get('/api/test/otp', async (req, res) => {
+    const email = typeof req.query.email === 'string' ? req.query.email : undefined;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email required' });
+    }
+    
+    try {
+      const latestOTP = await prisma.oTPCode.findFirst({
+        where: { email },
+        orderBy: { createdAt: 'desc' }
+      });
+      
+      if (!latestOTP) {
+        return res.status(404).json({ error: 'No OTP found for this email' });
+      }
+      
+      res.status(200).json({
+        code: latestOTP.code,
+        email: latestOTP.email,
+        expiresAt: latestOTP.expiresAt,
+        createdAt: latestOTP.createdAt
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to retrieve OTP' });
+    }
+  });
   
-  if (isDev) {
-    console.log('📝 Development Mode Active:');
-    console.log('   - Verbose logging enabled');
-    console.log('   - OTP codes visible in console');
-    console.log('   - Test admin account available');
-    console.log(`   - Email mode: ${EMAIL_MODE}\n`);
-  }
-  
-  console.log('📋 Available Endpoints:');
-  console.log('   POST /api/user/signup - User registration');
-  console.log('   POST /api/user/login - User login (sends 2FA code)');
-  console.log('   POST /api/user/verify-2fa - Verify 2FA code');
-  console.log('   POST /api/admin/login - Admin authentication');
-  console.log('   GET  /api/health - Health check\n');
-  
-  console.log('👂 Server is listening for requests...\n');
-});
+  console.log('⚠️ TEST MODE: /api/test/otp endpoint enabled');
+}
+
+/**
+ * Start Server (only if not in test mode)
+ */
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log('\n🚀 ═══════════════════════════════════════════════════════');
+    console.log(`   CLEVIO Backend Server Started`);
+    console.log(`   Port: ${PORT}`);
+    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`   Email Mode: ${EMAIL_MODE}`);
+    console.log(`   SendGrid configured: ${EMAIL_MODE === 'sendgrid' && !!process.env.SENDGRID_API_KEY ? 'Yes' : 'No'}`);
+    console.log(`   Debug logging: ${isDev ? 'ENABLED' : 'Production mode'}`);
+    console.log('═══════════════════════════════════════════════════════\n');
+    
+    if (isDev) {
+      console.log('📝 Development Mode Active:');
+      console.log('   - Verbose logging enabled');
+      console.log('   - OTP codes visible in console');
+      console.log('   - Test admin account available');
+      console.log(`   - Email mode: ${EMAIL_MODE}\n`);
+    }
+    
+    console.log('📋 Available Endpoints:');
+    console.log('   POST /api/user/signup - User registration');
+    console.log('   POST /api/user/login - User login (sends 2FA code)');
+    console.log('   POST /api/user/verify-2fa - Verify 2FA code');
+    console.log('   POST /api/admin/login - Admin authentication');
+    console.log('   GET  /api/health - Health check\n');
+    
+    console.log('👂 Server is listening for requests...\n');
+    
+    // Initialize test admin in development mode
+    initializeTestAdmin().catch((err) => {
+      console.error('Failed to initialize test admin:', err);
+    });
+  });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
