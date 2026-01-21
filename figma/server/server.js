@@ -12,6 +12,8 @@ import dotenv from 'dotenv';
 import sgMail from '@sendgrid/mail';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 // Load environment variables
 dotenv.config();
@@ -34,9 +36,36 @@ const OTP_EXP_MINUTES = parseInt(process.env.OTP_EXP_MINUTES) || 10;
 const OTP_MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_ATTEMPTS) || 5;
 const OTP_RESEND_COOLDOWN = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 30;
 
-// Middleware
-app.use(cors());
+// Security: Helmet for secure headers
+app.use(helmet({
+  contentSecurityPolicy: isDev ? false : undefined, // Disable CSP in dev for easier debugging
+}));
+
+// CORS configuration
+const corsOptions = {
+  origin: process.env.APP_BASE_URL || 'http://localhost:5173',
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+
+// Body parser
 app.use(express.json());
+
+// Rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per window
+  message: 'Too many authentication attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 3, // 3 requests per minute
+  message: 'Too many OTP requests, please try again later',
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -110,7 +139,7 @@ initializeTestAdmin();
  * User Signup Endpoint
  * POST /api/user/signup
  */
-app.post('/api/user/signup', async (req, res) => {
+app.post('/api/user/signup', authLimiter, async (req, res) => {
   const requestId = req.requestId;
   
   try {
@@ -183,7 +212,7 @@ app.post('/api/user/signup', async (req, res) => {
  * User Login Endpoint (Sends 2FA OTP)
  * POST /api/user/login
  */
-app.post('/api/user/login', async (req, res) => {
+app.post('/api/user/login', authLimiter, async (req, res) => {
   const requestId = req.requestId;
   
   try {
@@ -317,7 +346,7 @@ app.post('/api/user/login', async (req, res) => {
  * 2FA Verification Endpoint
  * POST /api/user/verify-2fa
  */
-app.post('/api/user/verify-2fa', async (req, res) => {
+app.post('/api/user/verify-2fa', authLimiter, async (req, res) => {
   const requestId = req.requestId;
   
   try {
@@ -439,7 +468,7 @@ app.post('/api/user/verify-2fa', async (req, res) => {
  * Resend OTP Endpoint
  * POST /api/user/resend-otp
  */
-app.post('/api/user/resend-otp', async (req, res) => {
+app.post('/api/user/resend-otp', otpLimiter, async (req, res) => {
   const requestId = req.requestId;
   
   try {
@@ -553,7 +582,7 @@ app.post('/api/user/resend-otp', async (req, res) => {
  * Admin Login Endpoint
  * POST /api/admin/login
  */
-app.post('/api/admin/login', async (req, res) => {
+app.post('/api/admin/login', authLimiter, async (req, res) => {
   const requestId = req.requestId;
   
   try {
