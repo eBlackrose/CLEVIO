@@ -4,13 +4,13 @@
  * Controls whether to use the mock backend or real backend server.
  * 
  * TO ENABLE REAL EMAIL SENDING:
- * 1. Set USE_REAL_BACKEND = true
+ * 1. Set USE_REAL_BACKEND = true (DONE)
  * 2. Start the backend server: cd server && npm run dev
- * 3. Make sure SendGrid is configured in server/.env
+ * 3. Make sure EMAIL_MODE is configured in server/.env
  */
 
 // Set to true to use real backend with email sending
-export const USE_REAL_BACKEND = false;
+export const USE_REAL_BACKEND = true;
 
 // Backend API URL (only used when USE_REAL_BACKEND is true)
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
