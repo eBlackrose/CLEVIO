@@ -59,9 +59,25 @@ app.use(helmet({
   contentSecurityPolicy: isDev ? false : undefined, // Disable CSP in dev for easier debugging
 }));
 
-// CORS configuration
+// CORS configuration - support multiple frontend URLs
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://clevio-frontend.onrender.com',
+  'https://demo.clevio.com',
+  process.env.APP_BASE_URL
+].filter(Boolean); // Remove undefined/null values
+
 const corsOptions = {
-  origin: process.env.APP_BASE_URL || 'http://localhost:5173',
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
