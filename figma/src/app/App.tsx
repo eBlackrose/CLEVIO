@@ -9,7 +9,7 @@ import { UserProvider } from './contexts/user-context';
 import { AdminProvider } from './contexts/admin-context';
 import { AdminDataProvider } from './contexts/admin-data-context';
 import { Toaster } from './components/ui/sonner';
-import './utils/mock-backend'; // Initialize mock backend API
+// Mock backend removed - using real backend API (see config/api.ts)
 import { HomePage } from './pages/home';
 import { PricingPage } from './pages/pricing';
 import { PricingWithDisclosuresPage } from './pages/pricing-with-disclosures';
