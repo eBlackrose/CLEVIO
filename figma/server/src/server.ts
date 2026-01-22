@@ -54,6 +54,9 @@ const OTP_EXP_MINUTES: number = parseInt(process.env.OTP_EXP_MINUTES || '10');
 const OTP_MAX_ATTEMPTS: number = parseInt(process.env.OTP_MAX_ATTEMPTS || '5');
 const OTP_RESEND_COOLDOWN: number = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS || '30');
 
+// Feature flag: Temporarily disable 2FA (for testing without email provider)
+const DISABLE_2FA: boolean = process.env.DISABLE_2FA === 'true';
+
 // Security: Helmet for secure headers
 app.use(helmet({
   contentSecurityPolicy: isDev ? false : undefined, // Disable CSP in dev for easier debugging
@@ -286,6 +289,41 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
       console.warn(`❌ Login failed - invalid password for: ${email}`);
       console.groupEnd();
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    
+    // 🚨 TEMPORARY: Skip 2FA if disabled via feature flag
+    if (DISABLE_2FA) {
+      console.log(`⚠️  2FA is DISABLED - generating JWT token directly`);
+      
+      // Generate JWT token
+      const token = jwt.sign(
+        { 
+          userId: user.id,
+          email: user.email,
+          role: user.role 
+        },
+        process.env.JWT_SECRET!,
+        { expiresIn: '7d' }
+      );
+      
+      console.log(`✅ Login successful (2FA bypassed): ${email}`);
+      console.groupEnd();
+      
+      return res.status(200).json({
+        message: 'Login successful',
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          company: user.company ? {
+            id: user.company.id,
+            name: user.company.name
+          } : null
+        }
+      });
     }
     
     // Generate 6-digit OTP
@@ -1643,6 +1681,7 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`   Email Mode: ${EMAIL_MODE}`);
     console.log(`   SendGrid configured: ${EMAIL_MODE === 'sendgrid' && !!process.env.SENDGRID_API_KEY ? 'Yes' : 'No'}`);
+    console.log(`   2FA: ${DISABLE_2FA ? '⚠️  DISABLED (Temporary)' : '✅ Enabled'}`);
     console.log(`   Debug logging: ${isDev ? 'ENABLED' : 'Production mode'}`);
     console.log('═══════════════════════════════════════════════════════\n');
     
