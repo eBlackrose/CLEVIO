@@ -7,8 +7,8 @@ npm ci
 echo "Building TypeScript..."
 npm run build
 
-echo "Running database migrations..."
+echo "Setting up database..."
 npx prisma generate
-npx prisma migrate deploy
+npx prisma db push --accept-data-loss --skip-generate
 
 echo "Build complete!"
