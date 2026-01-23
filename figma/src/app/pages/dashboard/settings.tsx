@@ -136,7 +136,7 @@ export function SettingsPage() {
     
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('clevio_token');
+      const token = localStorage.getItem('authToken');
       const userEmail = localStorage.getItem('userEmail');
       
       const response = await fetch(`${apiUrl}/api/company`, {
@@ -190,7 +190,7 @@ export function SettingsPage() {
     
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('clevio_token');
+      const token = localStorage.getItem('authToken');
       const userEmail = localStorage.getItem('userEmail');
       
       const response = await fetch(`${apiUrl}/api/company`, {
@@ -237,7 +237,7 @@ export function SettingsPage() {
     
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('clevio_token');
+      const token = localStorage.getItem('authToken');
       
       const response = await fetch(`${apiUrl}/api/payments/amex`, {
         method: 'PUT',

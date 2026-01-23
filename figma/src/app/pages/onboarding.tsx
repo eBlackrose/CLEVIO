@@ -70,7 +70,7 @@ export function OnboardingPage() {
   const completeOnboarding = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('clevio_token');
+      const token = localStorage.getItem('authToken');
       const userEmail = localStorage.getItem('userEmail');
       
       // 1. Save AMEX Card
