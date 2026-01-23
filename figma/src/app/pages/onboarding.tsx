@@ -67,24 +67,90 @@ export function OnboardingPage() {
     setEmployees(employees.filter(e => e.id !== id));
   };
   
-  const completeOnboarding = () => {
-    // Save all onboarding data to user context
-    updateUserData({
-      employees: employees.map(emp => ({
-        ...emp,
-        bankStatus: 'pending' as const,
-        payrollStatus: 'inactive' as const,
-      })),
-      amexCard: {
-        last4: amexData.cardNumber.slice(-4),
-        name: amexData.name,
-        expiry: amexData.expiry,
-      },
-      selectedTiers,
-    });
-    
-    // Navigate to dashboard
-    navigate('/dashboard');
+  const completeOnboarding = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('clevio_token');
+      const userEmail = localStorage.getItem('userEmail');
+      
+      // 1. Save AMEX Card
+      const amexResponse = await fetch(`${apiUrl}/api/payments/amex`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          last4: amexData.cardNumber.slice(-4),
+          cardName: amexData.name,
+          expiryMonth: amexData.expiry.split('/')[0],
+          expiryYear: amexData.expiry.split('/')[1],
+          token: 'mock_token', // In production, use real Stripe/AMEX token
+        }),
+      });
+      
+      if (!amexResponse.ok) {
+        throw new Error('Failed to save payment method');
+      }
+      
+      // 2. Save Employees (one by one)
+      for (const employee of employees) {
+        await fetch(`${apiUrl}/api/team`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            email: userEmail,
+            fullName: employee.name,
+            memberEmail: employee.email,
+            type: employee.type,
+          }),
+        });
+      }
+      
+      // 3. Save Service Tier Selections
+      const subsResponse = await fetch(`${apiUrl}/api/subscriptions`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          payrollEnabled: selectedTiers.payroll,
+          taxEnabled: selectedTiers.tax,
+          advisoryEnabled: selectedTiers.advisory,
+        }),
+      });
+      
+      if (!subsResponse.ok) {
+        throw new Error('Failed to save subscription preferences');
+      }
+      
+      // Update local state
+      updateUserData({
+        employees: employees.map(emp => ({
+          ...emp,
+          bankStatus: 'pending' as const,
+          payrollStatus: 'inactive' as const,
+        })),
+        amexCard: {
+          last4: amexData.cardNumber.slice(-4),
+          name: amexData.name,
+          expiry: amexData.expiry,
+        },
+        selectedTiers,
+      });
+      
+      // Navigate to dashboard
+      navigate('/dashboard');
+      
+    } catch (error: any) {
+      console.error('Error completing onboarding:', error);
+      alert('Failed to save onboarding data. Please try again.');
+    }
   };
   
   const canProceed = () => {

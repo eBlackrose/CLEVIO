@@ -33,7 +33,7 @@ interface EmployeeFormData {
 }
 
 export function EmployeesPage() {
-  const { userData, updateUserData } = useUser();
+  const { userData, updateUserData, refreshUserData } = useUser();
   
   const [employees, setEmployees] = useState<Employee[]>([]);
   
@@ -154,7 +154,7 @@ export function EmployeesPage() {
   };
   
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate required fields
@@ -204,56 +204,72 @@ export function EmployeesPage() {
       return;
     }
     
-    // Create or update employee
-    if (editingEmployee) {
-      // Update existing employee
-      const updatedEmployees = employees.map(emp =>
-        emp.id === editingEmployee.id
-          ? {
-              ...emp,
-              name: formData.name,
-              email: formData.email,
-              type: formData.type,
-              ssn: formData.type === 'employee' ? formData.ssn : undefined,
-              ein: formData.type === 'contractor' ? formData.ein : undefined,
-              bankAccount: formData.bankAccount,
-              routingNumber: formData.routingNumber,
-              bankName: formData.bankName,
-              bankStatus: formData.bankStatus,
-              salary: formData.salary ? parseFloat(formData.salary) : undefined,
-            }
-          : emp
-      );
-      
-      setEmployees(updatedEmployees);
-      updateUserData({ employees: updatedEmployees });
-      toast.success('Team member updated successfully');
-    } else {
-      // Add new employee
-      const newEmployee: Employee = {
-        id: Date.now().toString(),
-        name: formData.name,
-        email: formData.email,
-        type: formData.type,
-        bankStatus: formData.bankStatus,
-        payrollStatus: 'active',
-        ssn: formData.type === 'employee' ? formData.ssn : undefined,
-        ein: formData.type === 'contractor' ? formData.ein : undefined,
-        bankAccount: formData.bankAccount,
-        routingNumber: formData.routingNumber,
-        bankName: formData.bankName,
-        salary: formData.salary ? parseFloat(formData.salary) : undefined,
-      };
-      
-      const updatedEmployees = [...employees, newEmployee];
-      setEmployees(updatedEmployees);
-      updateUserData({ employees: updatedEmployees });
-      toast.success('Team member added successfully');
-    }
+    // Prepare API payload
+    const ssnLast4 = formData.type === 'employee' && formData.ssn 
+      ? formData.ssn.replace(/\D/g, '').slice(-4) 
+      : undefined;
     
-    // Close modal and reset form
-    setIsModalOpen(false);
-    setEditingEmployee(null);
+    const apiPayload = {
+      email: userData?.email,
+      fullName: formData.name,
+      memberEmail: formData.email,
+      type: formData.type,
+      salary: formData.salary ? parseFloat(formData.salary) : undefined,
+      bankName: formData.bankName,
+      routingNumber: formData.routingNumber,
+      accountLast4: formData.bankAccount,
+      ssnLast4: ssnLast4,
+    };
+    
+    try {
+      // Call backend API
+      if (editingEmployee) {
+        // Update existing employee
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/team/${editingEmployee.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('clevio_token')}`,
+          },
+          body: JSON.stringify(apiPayload),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to update team member');
+        }
+        
+        toast.success('Team member updated successfully');
+      } else {
+        // Add new employee
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/team`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('clevio_token')}`,
+          },
+          body: JSON.stringify(apiPayload),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to add team member');
+        }
+        
+        toast.success('Team member added successfully');
+      }
+      
+      // Refresh data from backend
+      await refreshUserData();
+      
+      // Close modal and reset form
+      setIsModalOpen(false);
+      setEditingEmployee(null);
+      
+    } catch (error: any) {
+      console.error('Error saving team member:', error);
+      toast.error(error.message || 'Failed to save team member');
+    }
   };
   
   return (

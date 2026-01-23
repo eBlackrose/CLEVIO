@@ -134,23 +134,49 @@ export function SettingsPage() {
     
     setIsCompanySaving(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Update user data
-    updateUserData({
-      companyName: companyProfile.companyName,
-      ein: companyProfile.ein,
-      businessAddress: companyProfile.businessAddress,
-    });
-    
-    // Mark as saved
-    setCompanyProfileSaved(companyProfile);
-    setIsCompanyProfileChanged(false);
-    setIsCompanySaving(false);
-    
-    // Show success toast
-    toast.success('Company profile updated successfully');
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('clevio_token');
+      const userEmail = localStorage.getItem('userEmail');
+      
+      const response = await fetch(`${apiUrl}/api/company`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          name: companyProfile.companyName,
+          ein: companyProfile.ein.replace(/\D/g, ''),
+          businessAddress: companyProfile.businessAddress,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update company profile');
+      }
+      
+      // Update local user data
+      updateUserData({
+        companyName: companyProfile.companyName,
+        ein: companyProfile.ein,
+        businessAddress: companyProfile.businessAddress,
+      });
+      
+      // Mark as saved
+      setCompanyProfileSaved(companyProfile);
+      setIsCompanyProfileChanged(false);
+      
+      // Show success toast
+      toast.success('Company profile updated successfully');
+    } catch (error: any) {
+      console.error('Error saving company profile:', error);
+      toast.error(error.message || 'Failed to update company profile');
+    } finally {
+      setIsCompanySaving(false);
+    }
   };
   
   const handleContactInfoSave = async () => {
@@ -162,48 +188,96 @@ export function SettingsPage() {
     
     setIsContactSaving(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Update user data
-    updateUserData({
-      firstName: contactInfo.firstName,
-      lastName: contactInfo.lastName,
-      email: contactInfo.email,
-      phone: contactInfo.phone,
-    });
-    
-    // Mark as saved
-    setContactInfoSaved(contactInfo);
-    setIsContactInfoChanged(false);
-    setIsContactSaving(false);
-    
-    // Show success toast
-    toast.success('Contact information updated successfully');
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('clevio_token');
+      const userEmail = localStorage.getItem('userEmail');
+      
+      const response = await fetch(`${apiUrl}/api/company`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          phone: contactInfo.phone?.replace(/\D/g, ''),
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update contact information');
+      }
+      
+      // Update local user data
+      updateUserData({
+        firstName: contactInfo.firstName,
+        lastName: contactInfo.lastName,
+        email: contactInfo.email,
+        phone: contactInfo.phone,
+      });
+      
+      // Mark as saved
+      setContactInfoSaved(contactInfo);
+      setIsContactInfoChanged(false);
+      
+      // Show success toast
+      toast.success('Contact information updated successfully');
+    } catch (error: any) {
+      console.error('Error saving contact info:', error);
+      toast.error(error.message || 'Failed to update contact information');
+    } finally {
+      setIsContactSaving(false);
+    }
   };
   
   const handleAmexCardSave = async () => {
     setIsAmexSaving(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Update user data
-    updateUserData({
-      amexCard: {
-        last4: amexCard.last4,
-        name: amexCard.name,
-      },
-    });
-    
-    // Mark as saved
-    setAmexCardSaved(amexCard);
-    setIsAmexCardChanged(false);
-    setIsAmexSaving(false);
-    setIsEditingAmex(false);
-    
-    // Show success toast
-    toast.success('AMEX card details updated successfully');
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('clevio_token');
+      
+      const response = await fetch(`${apiUrl}/api/payments/amex`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          last4: amexCard.last4,
+          cardName: amexCard.name,
+          token: 'mock_token', // In production, use real Stripe/AMEX token
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update payment method');
+      }
+      
+      // Update local user data
+      updateUserData({
+        amexCard: {
+          last4: amexCard.last4,
+          name: amexCard.name,
+        },
+      });
+      
+      // Mark as saved
+      setAmexCardSaved(amexCard);
+      setIsAmexCardChanged(false);
+      setIsEditingAmex(false);
+      
+      // Show success toast
+      toast.success('AMEX card details updated successfully');
+    } catch (error: any) {
+      console.error('Error saving AMEX card:', error);
+      toast.error(error.message || 'Failed to update payment method');
+    } finally {
+      setIsAmexSaving(false);
+    }
   };
   
   return (
