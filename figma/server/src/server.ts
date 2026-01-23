@@ -298,7 +298,7 @@ app.post('/api/user/login', authLimiter, async (req, res) => {
       // Generate JWT token
       const token = jwt.sign(
         { 
-          userId: user.id,
+          id: user.id,
           email: user.email,
           role: user.role 
         },
